@@ -4,18 +4,10 @@ import (
 	"net/http"
 	"strings"
 
-	token "github.com/kyawswarlynn14/nano_food_api/tokens"
+	token "nano_food_api/tokens"
 
 	"github.com/gin-gonic/gin"
 )
-
-/**
-User Roles
-0 - waiter
-1 - assistant
-2 - manager
-100 - root admin
-**/
 
 // Authentication middleware for validating JWT token
 func Authentication() gin.HandlerFunc {

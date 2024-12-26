@@ -4,8 +4,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/kyawswarlynn14/nano_food_api/middlewares"
-	"github.com/kyawswarlynn14/nano_food_api/routes"
+	"nano_food_api/routes"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -38,14 +37,7 @@ func main() {
 		AllowCredentials: true,
 	}))
 
-	publicRoutes := router.Group("/")
-	authRoutes := router.Group("/")
-	authRoutes.Use(middlewares.Authentication())
-
-	adminRoutes := router.Group("/")
-	adminRoutes.Use(middlewares.Authentication()).Use(middlewares.Authorization([]int{1, 2, 100}))
-
-	routes.UserRoutes(publicRoutes, authRoutes, adminRoutes)
+	routes.UserRoutes(router)
 
 	log.Fatal(router.Run(":" + port))
 }

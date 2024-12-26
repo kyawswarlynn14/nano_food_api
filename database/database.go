@@ -47,3 +47,6 @@ var Client *mongo.Client = DBSet()
 func NanoFoodData(client *mongo.Client, CollectionName string) *mongo.Collection {
 	return client.Database("Portfolio").Collection(CollectionName)
 }
+
+var UserCollection *mongo.Collection = NanoFoodData(Client, "Users")
+var RestaurantCollection *mongo.Collection = NanoFoodData(Client, "Restaurants")
