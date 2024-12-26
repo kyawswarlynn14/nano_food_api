@@ -49,4 +49,5 @@ func NanoFoodData(client *mongo.Client, CollectionName string) *mongo.Collection
 }
 
 var UserCollection *mongo.Collection = NanoFoodData(Client, "Users")
-var RestaurantCollection *mongo.Collection = NanoFoodData(Client, "Restaurants")
+var BranchCollection *mongo.Collection = NanoFoodData(Client, "Branches")
+var CategoryCollection *mongo.Collection = NanoFoodData(Client, "Categories")

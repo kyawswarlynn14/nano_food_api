@@ -21,6 +21,7 @@ import (
 )
 
 var UserCollection *mongo.Collection = database.UserCollection
+var BranchCollection *mongo.Collection = database.BranchCollection
 
 func RegisterUser() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -142,17 +143,17 @@ func CreateUser() gin.HandlerFunc {
 		defer cancel()
 
 		var input struct {
-			RestaurantID string `json:"restaurant_id" binding:"required"`
-			User         models.User
+			Branch_ID string `json:"branch_id" binding:"required"`
+			User      models.User
 		}
 		if err := c.BindJSON(&input); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error()})
 			return
 		}
 
-		restaurantObjID, err := primitive.ObjectIDFromHex(input.RestaurantID)
+		branchObjId, err := primitive.ObjectIDFromHex(input.Branch_ID)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid restaurant ID"})
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid branch ID"})
 			return
 		}
 
@@ -161,21 +162,10 @@ func CreateUser() gin.HandlerFunc {
 			return
 		}
 
-		currentUser, err := helpers.GetCurrentUser(c, UserCollection)
+		var branch models.Branch
+		err = BranchCollection.FindOne(ctx, bson.M{"_id": branchObjId}).Decode(&branch)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": err.Error()})
-			return
-		}
-
-		var restaurant models.Restaurant
-		err = RestaurantCollection.FindOne(ctx, bson.M{"_id": restaurantObjID}).Decode(&restaurant)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error retrieving restaurant"})
-			return
-		}
-
-		if currentUser.Role == 3 && !helpers.IsRestaurntMember(restaurant.Members, currentUser.User_ID) {
-			c.JSON(http.StatusForbidden, gin.H{"success": false, "error": "You are not authorized to create a user for this restaurant"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error retrieving branch"})
 			return
 		}
 
@@ -212,6 +202,7 @@ func CreateUser() gin.HandlerFunc {
 
 		// Create user
 		input.User.User_ID = primitive.NewObjectID()
+		input.User.Branch_ID = branchObjId
 		input.User.Created_At = time.Now()
 		input.User.Updated_At = time.Now()
 
@@ -221,19 +212,7 @@ func CreateUser() gin.HandlerFunc {
 			return
 		}
 
-		// Add user to the restaurant's members
-		updateResult, err := RestaurantCollection.UpdateOne(
-			ctx,
-			bson.M{"_id": restaurantObjID},
-			bson.M{"$addToSet": bson.M{"members": input.User.User_ID}},
-		)
-		if err != nil || updateResult.MatchedCount == 0 {
-			log.Printf("Error updating restaurant: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error adding user to restaurant members"})
-			return
-		}
-
-		c.JSON(http.StatusCreated, gin.H{"success": true, "message": "Created user and added to restaurant successfully"})
+		c.JSON(http.StatusCreated, gin.H{"success": true, "message": "Created user and added to branch successfully"})
 	}
 }
 
@@ -288,17 +267,7 @@ func LoginUser() gin.HandlerFunc {
 
 func GetCurrentUser() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		user_obj_id, err := helpers.GetUserIDFromMdw(c)
-		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": err.Error()})
-			return
-		}
-
-		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
-		defer cancel()
-
-		var user models.User
-		err = UserCollection.FindOne(ctx, bson.M{"_id": user_obj_id}).Decode(&user)
+		user, err := helpers.GetCurrentUser(c, UserCollection)
 		if err != nil {
 			log.Printf("Error retrieving user: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error retrieving user", "details": err.Error()})
@@ -535,38 +504,44 @@ func UpdateUserRole() gin.HandlerFunc {
 		defer cancel()
 
 		var roleData struct {
-			UserID       string `json:"user_id" binding:"required"`
-			Role         int    `json:"role" binding:"required"`
-			RestaurantID string `json:"restaurant_id" binding:"required"`
+			User_ID   string `json:"user_id" binding:"required"`
+			Role      int    `json:"role" binding:"required"`
+			Branch_ID string `json:"branch_id" binding:"required"`
 		}
 		if err := c.BindJSON(&roleData); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error()})
 			return
 		}
 
-		userObjID, err := primitive.ObjectIDFromHex(roleData.UserID)
+		userObjID, err := primitive.ObjectIDFromHex(roleData.User_ID)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid user ID"})
 			return
 		}
 
-		restaurantObjID, err := primitive.ObjectIDFromHex(roleData.RestaurantID)
+		branchObjID, err := primitive.ObjectIDFromHex(roleData.Branch_ID)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid restaurant ID"})
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid branch ID"})
 			return
 		}
 
-		// Fetch restaurant details
-		var restaurant models.Restaurant
-		err = RestaurantCollection.FindOne(ctx, bson.M{"_id": restaurantObjID}).Decode(&restaurant)
+		// Fetch branch details
+		var branch models.Branch
+		err = BranchCollection.FindOne(ctx, bson.M{"_id": branchObjID}).Decode(&branch)
 		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Restaurant not found"})
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Branch not found"})
 			return
 		}
 
-		isMember := helpers.IsRestaurntMember(restaurant.Members, userObjID)
-		if !isMember {
-			c.JSON(http.StatusForbidden, gin.H{"success": false, "error": "User is not a member of this restaurant"})
+		var user models.User
+		err = UserCollection.FindOne(ctx, bson.M{"_id": userObjID}).Decode(&user)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "User not found"})
+			return
+		}
+
+		if user.Branch_ID != branch.Branch_ID {
+			c.JSON(http.StatusForbidden, gin.H{"success": false, "error": "User is not a member of this branch"})
 			return
 		}
 
@@ -577,8 +552,7 @@ func UpdateUserRole() gin.HandlerFunc {
 		}
 
 		if currentUser.Role != 100 {
-			isMember := helpers.IsRestaurntMember(restaurant.Members, currentUser.User_ID)
-			if !isMember {
+			if currentUser.Branch_ID != branch.Branch_ID {
 				c.JSON(http.StatusForbidden, gin.H{"success": false, "error": "You are not authorized to update user role"})
 				return
 			}
@@ -608,42 +582,116 @@ func UpdateUserRole() gin.HandlerFunc {
 	}
 }
 
+func UpdateUserBranch() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
+		defer cancel()
+
+		var roleData struct {
+			User_ID   string `json:"user_id" binding:"required"`
+			Branch_ID string `json:"branch_id" binding:"required"`
+		}
+		if err := c.BindJSON(&roleData); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error()})
+			return
+		}
+
+		userObjID, err := primitive.ObjectIDFromHex(roleData.User_ID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid user ID"})
+			return
+		}
+
+		branchObjID, err := primitive.ObjectIDFromHex(roleData.Branch_ID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid branch ID"})
+			return
+		}
+
+		// Fetch branch details
+		var branch models.Branch
+		err = BranchCollection.FindOne(ctx, bson.M{"_id": branchObjID}).Decode(&branch)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Branch not found"})
+			return
+		}
+
+		var user models.User
+		err = UserCollection.FindOne(ctx, bson.M{"_id": userObjID}).Decode(&user)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "User not found"})
+			return
+		}
+
+		currentUser, err := helpers.GetCurrentUser(c, UserCollection)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": err.Error()})
+			return
+		}
+
+		if currentUser.Role != 100 {
+			if currentUser.Branch_ID != branch.Branch_ID {
+				c.JSON(http.StatusForbidden, gin.H{"success": false, "error": "You are not authorized to update user branch"})
+				return
+			}
+		}
+
+		_, err = UserCollection.UpdateOne(
+			ctx,
+			bson.M{"_id": userObjID},
+			bson.M{"$set": bson.M{"branch_id": branch.Branch_ID, "updated_at": time.Now()}},
+		)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error updating user branch"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"success": true, "message": "User branch updated successfully"})
+	}
+}
+
 func DeleteUser() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 		defer cancel()
 
 		var reqBody struct {
-			UserID       string `json:"user_id" binding:"required"`
-			RestaurantID string `json:"restaurant_id" binding:"required"`
+			User_ID   string `json:"user_id" binding:"required"`
+			Branch_ID string `json:"branch_id" binding:"required"`
 		}
 		if err := c.BindJSON(&reqBody); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error()})
 			return
 		}
 
-		userObjID, err := primitive.ObjectIDFromHex(reqBody.UserID)
+		userObjID, err := primitive.ObjectIDFromHex(reqBody.User_ID)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid user ID"})
 			return
 		}
 
-		restaurantObjID, err := primitive.ObjectIDFromHex(reqBody.RestaurantID)
+		branchObjID, err := primitive.ObjectIDFromHex(reqBody.Branch_ID)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid restaurant ID"})
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid branch ID"})
 			return
 		}
 
-		// Fetch restaurant details
-		var restaurant models.Restaurant
-		err = RestaurantCollection.FindOne(ctx, bson.M{"_id": restaurantObjID}).Decode(&restaurant)
+		// Fetch branch details
+		var branch models.Branch
+		err = BranchCollection.FindOne(ctx, bson.M{"_id": branchObjID}).Decode(&branch)
 		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Restaurant not found"})
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Branch not found"})
 			return
 		}
 
-		isMember := helpers.IsRestaurntMember(restaurant.Members, userObjID)
-		if !isMember {
+		var user models.User
+		err = UserCollection.FindOne(ctx, bson.M{"_id": userObjID}).Decode(&user)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "User not found"})
+			return
+		}
+
+		if user.Branch_ID != branch.Branch_ID {
 			c.JSON(http.StatusForbidden, gin.H{"success": false, "error": "User is not a member of this restaurant"})
 			return
 		}
@@ -655,9 +703,8 @@ func DeleteUser() gin.HandlerFunc {
 		}
 
 		if currentUser.Role != 100 {
-			isMember := helpers.IsRestaurntMember(restaurant.Members, currentUser.User_ID)
-			if !isMember {
-				c.JSON(http.StatusForbidden, gin.H{"success": false, "error": "You are not authorized to update user role"})
+			if currentUser.Branch_ID != branch.Branch_ID {
+				c.JSON(http.StatusForbidden, gin.H{"success": false, "error": "You are not authorized to delete user"})
 				return
 			}
 		}
@@ -681,25 +728,25 @@ func DeleteUser() gin.HandlerFunc {
 	}
 }
 
-func GetAllRestaurantUsers() gin.HandlerFunc {
+func GetAllBranchUsers() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 		defer cancel()
 
-		restaurantID := c.Param("restaurant_id")
+		branchID := c.Param("branch_id")
 
-		// Validate restaurant ID
-		restaurantObjID, err := primitive.ObjectIDFromHex(restaurantID)
+		// Validate branch ID
+		branchObjID, err := primitive.ObjectIDFromHex(branchID)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid restaurant ID"})
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid branch ID"})
 			return
 		}
 
-		// Fetch restaurant
-		var restaurant models.Restaurant
-		err = RestaurantCollection.FindOne(ctx, bson.M{"_id": restaurantObjID}).Decode(&restaurant)
+		// Fetch branch
+		var branch models.Branch
+		err = BranchCollection.FindOne(ctx, bson.M{"_id": branchObjID}).Decode(&branch)
 		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Restaurant not found"})
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Branch not found"})
 			return
 		}
 
@@ -710,15 +757,14 @@ func GetAllRestaurantUsers() gin.HandlerFunc {
 		}
 
 		if currentUser.Role != 100 {
-			isMember := helpers.IsRestaurntMember(restaurant.Members, currentUser.User_ID)
-			if !isMember {
-				c.JSON(http.StatusForbidden, gin.H{"success": false, "error": "You are not authorized to view restaurant users"})
+			if currentUser.Branch_ID != branch.Branch_ID {
+				c.JSON(http.StatusForbidden, gin.H{"success": false, "error": "You are not authorized to view branch users"})
 				return
 			}
 		}
 
-		// Find all users who are members of the restaurant
-		cursor, err := UserCollection.Find(ctx, bson.M{"_id": bson.M{"$in": restaurant.Members}})
+		// Find all users who are members of the branch
+		cursor, err := UserCollection.Find(ctx, bson.M{"branch_id": branchObjID})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error fetching users"})
 			return

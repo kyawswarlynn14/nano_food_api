@@ -21,25 +21,23 @@ func UserRoutes(r *gin.Engine) {
 	authRoutes.PUT("/update-user-password", controllers.UpdateUserPassword())
 	authRoutes.PUT("/upload-avatar", controllers.UploadAvatar())
 
-	adminRoutes.GET("/get-restaurant-users/:restaurant_id", controllers.GetAllRestaurantUsers())
+	adminRoutes.GET("/get-branch-users/:branch_id", controllers.GetAllBranchUsers())
 	adminRoutes.PUT("/update-user-role", controllers.UpdateUserRole())
 	adminRoutes.DELETE("/delete-user", controllers.DeleteUser())
 
 	authRoutes.Use(middlewares.Authorization([]int{3, 100})).POST("/create-user", controllers.CreateUser())
+	authRoutes.Use(middlewares.Authorization([]int{3, 100})).POST("/update-user-branch", controllers.UpdateUserBranch())
 	authRoutes.Use(middlewares.Authorization([]int{100})).POST("/get-all-users", controllers.GetAllUsers())
 }
 
-func RestaurantRoutes(r *gin.Engine) {
+func BranchRoutes(r *gin.Engine) {
 	publicRoutes := r.Group("/")
 	adminRoutes := r.Group("/").Use(middlewares.Authentication()).Use(middlewares.Authorization([]int{3, 100}))
 	rootRoutes := r.Group("/").Use(middlewares.Authentication()).Use(middlewares.Authorization([]int{100}))
 
-	publicRoutes.POST("/get-restaurant/:restaurant_id", controllers.GetOneRestaurant())
-	adminRoutes.PUT("/update-restaurant/:restaurant_id", controllers.UpdateRestaurant())
-	adminRoutes.PUT("/add-restaurant-member", controllers.AddRestaurantMember())
-	adminRoutes.PUT("/remove-restaurant-member", controllers.RemoveRestaurantMember())
-
-	rootRoutes.POST("/create-restaurant", controllers.CreateRestaurant())
-	rootRoutes.GET("/get-restaurants", controllers.GetRestaurants())
-	rootRoutes.DELETE("/delete-restaurant/:restaurant_id", controllers.DeleteRestaurant())
+	publicRoutes.POST("/get-branch/:branch_id", controllers.GetOneBranch())
+	adminRoutes.PUT("/update-branch/:branch_id", controllers.UpdateBranch())
+	adminRoutes.POST("/create-branch", controllers.CreateBranch())
+	adminRoutes.GET("/get-branches", controllers.GetBranches())
+	rootRoutes.DELETE("/delete-branch/:branch_id", controllers.DeleteBranch())
 }

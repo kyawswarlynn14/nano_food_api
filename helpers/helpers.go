@@ -91,23 +91,6 @@ func GetUserIDFromMdw(c *gin.Context) (user_obj_id primitive.ObjectID, err error
 	return objID, nil
 }
 
-func GetUserInfoByID(user_id primitive.ObjectID, userCollection *mongo.Collection) (models.User, error) {
-	var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
-	defer cancel()
-
-	var user models.User
-	err := userCollection.FindOne(ctx, bson.M{"_id": user_id}).Decode(&user)
-	if err != nil {
-		return models.User{}, err
-	}
-
-	if user.User_ID.IsZero() {
-		return models.User{}, fmt.Errorf("user not found")
-	}
-
-	return user, nil
-}
-
 func GetCurrentUser(c *gin.Context, userCollection *mongo.Collection) (models.User, error) {
 	var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 	defer cancel()
@@ -147,15 +130,4 @@ func Contains(slice []int, item int) bool {
 		}
 	}
 	return false
-}
-
-func IsRestaurntMember(members []primitive.ObjectID, userID primitive.ObjectID) bool {
-	isMember := false
-	for _, member := range members {
-		if member == userID {
-			isMember = true
-			break
-		}
-	}
-	return isMember
 }

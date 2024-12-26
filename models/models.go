@@ -23,6 +23,7 @@ func (g TGender) IsValid() error {
 
 type User struct {
 	User_ID          primitive.ObjectID `json:"_id" bson:"_id"`
+	Branch_ID        primitive.ObjectID `json:"branch_id" bson:"branch_id"`
 	Name             string             `json:"name" bson:"name"`
 	Email            string             `json:"email" bson:"email"`
 	Password         string             `json:"password" bson:"password"`
@@ -48,13 +49,20 @@ User Roles
 100 - root admin
 **/
 
-type Restaurant struct {
-	ID         primitive.ObjectID   `json:"_id" bson:"_id"`
-	Owner_ID   primitive.ObjectID   `json:"owner_id" bson:"owner_id"`
-	Name       string               `json:"name" bson:"name"`
-	Address    string               `json:"address" bson:"address"`
-	Contact    string               `json:"contact" bson:"contact"`
-	Members    []primitive.ObjectID `json:"members" bson:"members"`
-	Created_At time.Time            `json:"created_at" bson:"created_at"`
-	Updated_At time.Time            `json:"updated_at" bson:"updated_at"`
+type Branch struct {
+	Branch_ID  primitive.ObjectID `json:"_id" bson:"_id"`
+	Name       string             `json:"name" bson:"name"`
+	Address    string             `json:"address" bson:"address"`
+	Contact    string             `json:"contact" bson:"contact"`
+	Created_At time.Time          `json:"created_at" bson:"created_at"`
+	Updated_At time.Time          `json:"updated_at" bson:"updated_at"`
+}
+
+type Category struct {
+	Category_ID primitive.ObjectID `json:"_id" bson:"_id"`
+	Branch_ID   primitive.ObjectID `json:"branch_id" bson:"branch_id"`
+	Title       string             `json:"title" bson:"title"`
+	Description string             `json:"description" bson:"description"`
+	Created_At  time.Time          `json:"created_at" bson:"created_at"`
+	Updated_At  time.Time          `json:"updated_at" bson:"updated_at"`
 }
