@@ -9,8 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Authentication middleware for validating JWT token
-func Authentication() gin.HandlerFunc {
+func Authentication(roles []int) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.Request.Header.Get("Authorization")
 		if authHeader == "" {
@@ -35,37 +34,16 @@ func Authentication() gin.HandlerFunc {
 			return
 		}
 
-		// Set user information in context
-		c.Set("email", claims.Email)
-		c.Set("userId", claims.User_ID)
-		c.Set("role", claims.Role)
-		c.Next()
-	}
-}
-
-// Authorization middleware to check roles
-func Authorization(roles []int) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		userRoleFromMdw, exists := c.Get("role")
-		if !exists {
-			c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": "Role not found in request context"})
-			c.Abort()
-			return
-		}
-
-		userRole, ok := userRoleFromMdw.(int)
-		if !ok {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Invalid role format"})
-			c.Abort()
-			return
-		}
-
 		isAuthorized := false
-		for _, role := range roles {
-			if userRole == role {
-				isAuthorized = true
-				break
+		if len(roles) > 0 {
+			for _, role := range roles {
+				if claims.Role == role {
+					isAuthorized = true
+					break
+				}
 			}
+		} else {
+			isAuthorized = true
 		}
 
 		if !isAuthorized {
@@ -74,6 +52,10 @@ func Authorization(roles []int) gin.HandlerFunc {
 			return
 		}
 
+		// Set user information in context
+		c.Set("email", claims.Email)
+		c.Set("userId", claims.User_ID)
+		c.Set("role", claims.Role)
 		c.Next()
 	}
 }

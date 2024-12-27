@@ -8,10 +8,11 @@ import (
 	"nano_food_api/routes"
 
 	"github.com/gin-contrib/cors"
-	"github.com/gin-contrib/limiter"
-	"github.com/gin-contrib/limiter/store/memory"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"github.com/ulule/limiter/v3"
+	ginlimiter "github.com/ulule/limiter/v3/drivers/middleware/gin"
+	"github.com/ulule/limiter/v3/drivers/store/memory"
 )
 
 func main() {
@@ -26,12 +27,18 @@ func main() {
 		port = "8000"
 	}
 
-	// Rate limit configuration
-	rateStore := memory.NewStore()
-	rateLimiter := limiter.RateLimiter(limiter.NewRateFromDuration(50, time.Minute), rateStore)
+	rate := limiter.Rate{
+		Period: 1 * time.Minute,
+		Limit:  5,
+	}
+	store := memory.NewStore()
+
+	instance := limiter.New(store, rate)
+	rateLimiter := ginlimiter.NewMiddleware(instance)
 
 	router := gin.New()
 	router.Use(gin.Logger())
+	router.Use(rateLimiter)
 
 	// CORS middleware
 	router.Use(cors.New(cors.Config{
@@ -46,11 +53,10 @@ func main() {
 		AllowCredentials: true,
 	}))
 
-	router.Use(rateLimiter)
-
 	// Routes
 	routes.UserRoutes(router)
 	routes.BranchRoutes(router)
+	routes.MenuRoutes(router)
 
 	log.Fatal(router.Run(":" + port))
 }

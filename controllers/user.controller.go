@@ -65,7 +65,7 @@ func RegisterUser() gin.HandlerFunc {
 		verificationCode := fmt.Sprintf("%06d", time.Now().UnixNano()%1000000)
 		user.VerificationCode = verificationCode
 		user.IsVerified = false
-		user.User_ID = primitive.NewObjectID()
+		user.User_ID = primitive.NewObjectID().String()
 		user.Role = 0
 		user.Created_At = time.Now()
 		user.Updated_At = time.Now()
@@ -142,46 +142,37 @@ func CreateUser() gin.HandlerFunc {
 		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 		defer cancel()
 
-		var input struct {
-			Branch_ID string `json:"branch_id" binding:"required"`
-			User      models.User
-		}
-		if err := c.BindJSON(&input); err != nil {
+		var user models.User
+		if err := c.BindJSON(&user); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error()})
 			return
 		}
 
-		branchObjId, err := primitive.ObjectIDFromHex(input.Branch_ID)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid branch ID"})
-			return
-		}
-
-		if !helpers.Contains([]int{0, 1, 2}, input.User.Role) {
+		if !helpers.Contains([]int{0, 1, 2}, user.Role) {
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid role! Allowed roles are 0, 1, or 2."})
 			return
 		}
 
 		var branch models.Branch
-		err = BranchCollection.FindOne(ctx, bson.M{"_id": branchObjId}).Decode(&branch)
+		err := BranchCollection.FindOne(ctx, bson.M{"_id": user.Branch_ID}).Decode(&branch)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error retrieving branch"})
 			return
 		}
 
 		// Validate email and password
-		if !govalidator.IsEmail(input.User.Email) {
+		if !govalidator.IsEmail(user.Email) {
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid email format!"})
 			return
 		}
-		if len(input.User.Password) < 6 {
+		if len(user.Password) < 6 {
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Password must be at least 6 characters!"})
 			return
 		}
 
 		// Check if user already exists
 		var existUser models.User
-		err = UserCollection.FindOne(ctx, bson.M{"email": input.User.Email}).Decode(&existUser)
+		err = UserCollection.FindOne(ctx, bson.M{"email": user.Email}).Decode(&existUser)
 		if err == nil {
 			c.JSON(http.StatusConflict, gin.H{"success": false, "error": "User already exists!"})
 			return
@@ -193,20 +184,19 @@ func CreateUser() gin.HandlerFunc {
 		}
 
 		// Hash the password
-		hashedPassword, hashErr := helpers.HashPassword(input.User.Password)
+		hashedPassword, hashErr := helpers.HashPassword(user.Password)
 		if hashErr != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error hashing password"})
 			return
 		}
-		input.User.Password = hashedPassword
+		user.Password = hashedPassword
 
 		// Create user
-		input.User.User_ID = primitive.NewObjectID()
-		input.User.Branch_ID = branchObjId
-		input.User.Created_At = time.Now()
-		input.User.Updated_At = time.Now()
+		user.User_ID = primitive.NewObjectID().String()
+		user.Created_At = time.Now()
+		user.Updated_At = time.Now()
 
-		_, err = UserCollection.InsertOne(ctx, input.User)
+		_, err = UserCollection.InsertOne(ctx, user)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error creating user"})
 			return
@@ -249,7 +239,7 @@ func LoginUser() gin.HandlerFunc {
 			return
 		}
 
-		accessToken, err := token.TokenGenerator(user.Email, user.User_ID.Hex(), user.Role)
+		accessToken, err := token.TokenGenerator(user.Email, user.User_ID, user.Role)
 		if err != nil {
 			log.Printf("Error generating token: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error generating token"})
@@ -287,7 +277,7 @@ func UpdateUserInfo() gin.HandlerFunc {
 		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 		defer cancel()
 
-		user_obj_id, err := helpers.GetUserIDFromMdw(c)
+		user_id, err := helpers.GetUserIDFromMdw(c)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": err.Error()})
 			return
@@ -311,7 +301,7 @@ func UpdateUserInfo() gin.HandlerFunc {
 		if updateData.Email != "" {
 			var existingUser models.User
 			err := UserCollection.FindOne(ctx, bson.M{"email": updateData.Email}).Decode(&existingUser)
-			if err == nil && existingUser.User_ID != user_obj_id {
+			if err == nil && existingUser.User_ID != user_id {
 				c.JSON(http.StatusConflict, gin.H{"success": false, "error": "Email is already in use"})
 				return
 			}
@@ -345,7 +335,7 @@ func UpdateUserInfo() gin.HandlerFunc {
 
 		_, err = UserCollection.UpdateOne(
 			ctx,
-			bson.M{"_id": user_obj_id},
+			bson.M{"_id": user_id},
 			bson.M{"$set": updateFields},
 		)
 		if err != nil {
@@ -355,7 +345,7 @@ func UpdateUserInfo() gin.HandlerFunc {
 		}
 
 		var updatedUser models.User
-		err = UserCollection.FindOne(ctx, bson.M{"_id": user_obj_id}).Decode(&updatedUser)
+		err = UserCollection.FindOne(ctx, bson.M{"_id": user_id}).Decode(&updatedUser)
 		if err != nil {
 			log.Printf("Error retrieving updated user: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error retrieving updated user"})
@@ -421,7 +411,7 @@ func UploadAvatar() gin.HandlerFunc {
 		}
 		avatarURL := fmt.Sprintf("https://storage.googleapis.com/%s/%s", bucketAttrs.Name, filename)
 
-		user_obj_id, err := helpers.GetUserIDFromMdw(c)
+		user_id, err := helpers.GetUserIDFromMdw(c)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": err.Error()})
 			return
@@ -430,7 +420,7 @@ func UploadAvatar() gin.HandlerFunc {
 		var ctxUpdate, cancelUpdate = context.WithTimeout(context.Background(), 100*time.Second)
 		defer cancelUpdate()
 
-		filter := bson.M{"_id": user_obj_id}
+		filter := bson.M{"_id": user_id}
 		update := bson.M{"$set": bson.M{"avatar": avatarURL, "updated_at": time.Now()}}
 		_, err = UserCollection.UpdateOne(ctxUpdate, filter, update)
 		if err != nil {
@@ -451,7 +441,7 @@ func UpdateUserPassword() gin.HandlerFunc {
 		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 		defer cancel()
 
-		user_obj_id, err := helpers.GetUserIDFromMdw(c)
+		user_id, err := helpers.GetUserIDFromMdw(c)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": err.Error()})
 			return
@@ -467,7 +457,7 @@ func UpdateUserPassword() gin.HandlerFunc {
 		}
 
 		var user models.User
-		err = UserCollection.FindOne(ctx, bson.M{"_id": user_obj_id}).Decode(&user)
+		err = UserCollection.FindOne(ctx, bson.M{"_id": user_id}).Decode(&user)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": "User not found"})
 			return
@@ -486,7 +476,7 @@ func UpdateUserPassword() gin.HandlerFunc {
 
 		_, err = UserCollection.UpdateOne(
 			ctx,
-			bson.M{"_id": user_obj_id},
+			bson.M{"_id": user_id},
 			bson.M{"$set": bson.M{"password": hashedPassword, "updated_at": time.Now()}},
 		)
 		if err != nil {
@@ -513,28 +503,16 @@ func UpdateUserRole() gin.HandlerFunc {
 			return
 		}
 
-		userObjID, err := primitive.ObjectIDFromHex(roleData.User_ID)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid user ID"})
-			return
-		}
-
-		branchObjID, err := primitive.ObjectIDFromHex(roleData.Branch_ID)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid branch ID"})
-			return
-		}
-
 		// Fetch branch details
 		var branch models.Branch
-		err = BranchCollection.FindOne(ctx, bson.M{"_id": branchObjID}).Decode(&branch)
+		err := BranchCollection.FindOne(ctx, bson.M{"_id": roleData.Branch_ID}).Decode(&branch)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Branch not found"})
 			return
 		}
 
 		var user models.User
-		err = UserCollection.FindOne(ctx, bson.M{"_id": userObjID}).Decode(&user)
+		err = UserCollection.FindOne(ctx, bson.M{"_id": roleData.User_ID}).Decode(&user)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "User not found"})
 			return
@@ -570,7 +548,7 @@ func UpdateUserRole() gin.HandlerFunc {
 
 		_, err = UserCollection.UpdateOne(
 			ctx,
-			bson.M{"_id": userObjID},
+			bson.M{"_id": roleData.User_ID},
 			bson.M{"$set": bson.M{"role": roleData.Role, "updated_at": time.Now()}},
 		)
 		if err != nil {
@@ -587,37 +565,25 @@ func UpdateUserBranch() gin.HandlerFunc {
 		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 		defer cancel()
 
-		var roleData struct {
+		var reqBody struct {
 			User_ID   string `json:"user_id" binding:"required"`
 			Branch_ID string `json:"branch_id" binding:"required"`
 		}
-		if err := c.BindJSON(&roleData); err != nil {
+		if err := c.BindJSON(&reqBody); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error()})
-			return
-		}
-
-		userObjID, err := primitive.ObjectIDFromHex(roleData.User_ID)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid user ID"})
-			return
-		}
-
-		branchObjID, err := primitive.ObjectIDFromHex(roleData.Branch_ID)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid branch ID"})
 			return
 		}
 
 		// Fetch branch details
 		var branch models.Branch
-		err = BranchCollection.FindOne(ctx, bson.M{"_id": branchObjID}).Decode(&branch)
+		err := BranchCollection.FindOne(ctx, bson.M{"_id": reqBody.Branch_ID}).Decode(&branch)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Branch not found"})
 			return
 		}
 
 		var user models.User
-		err = UserCollection.FindOne(ctx, bson.M{"_id": userObjID}).Decode(&user)
+		err = UserCollection.FindOne(ctx, bson.M{"_id": reqBody.User_ID}).Decode(&user)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "User not found"})
 			return
@@ -638,7 +604,7 @@ func UpdateUserBranch() gin.HandlerFunc {
 
 		_, err = UserCollection.UpdateOne(
 			ctx,
-			bson.M{"_id": userObjID},
+			bson.M{"_id": reqBody.User_ID},
 			bson.M{"$set": bson.M{"branch_id": branch.Branch_ID, "updated_at": time.Now()}},
 		)
 		if err != nil {
@@ -664,28 +630,16 @@ func DeleteUser() gin.HandlerFunc {
 			return
 		}
 
-		userObjID, err := primitive.ObjectIDFromHex(reqBody.User_ID)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid user ID"})
-			return
-		}
-
-		branchObjID, err := primitive.ObjectIDFromHex(reqBody.Branch_ID)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid branch ID"})
-			return
-		}
-
 		// Fetch branch details
 		var branch models.Branch
-		err = BranchCollection.FindOne(ctx, bson.M{"_id": branchObjID}).Decode(&branch)
+		err := BranchCollection.FindOne(ctx, bson.M{"_id": reqBody.Branch_ID}).Decode(&branch)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Branch not found"})
 			return
 		}
 
 		var user models.User
-		err = UserCollection.FindOne(ctx, bson.M{"_id": userObjID}).Decode(&user)
+		err = UserCollection.FindOne(ctx, bson.M{"_id": reqBody.User_ID}).Decode(&user)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "User not found"})
 			return
@@ -709,7 +663,7 @@ func DeleteUser() gin.HandlerFunc {
 			}
 		}
 
-		result, err := UserCollection.DeleteOne(ctx, bson.M{"_id": userObjID})
+		result, err := UserCollection.DeleteOne(ctx, bson.M{"_id": reqBody.User_ID})
 		if err != nil {
 			log.Printf("Error deleting user: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error deleting user"})
@@ -735,16 +689,9 @@ func GetAllBranchUsers() gin.HandlerFunc {
 
 		branchID := c.Param("branch_id")
 
-		// Validate branch ID
-		branchObjID, err := primitive.ObjectIDFromHex(branchID)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid branch ID"})
-			return
-		}
-
 		// Fetch branch
 		var branch models.Branch
-		err = BranchCollection.FindOne(ctx, bson.M{"_id": branchObjID}).Decode(&branch)
+		err := BranchCollection.FindOne(ctx, bson.M{"_id": branchID}).Decode(&branch)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Branch not found"})
 			return
@@ -764,7 +711,7 @@ func GetAllBranchUsers() gin.HandlerFunc {
 		}
 
 		// Find all users who are members of the branch
-		cursor, err := UserCollection.Find(ctx, bson.M{"branch_id": branchObjID})
+		cursor, err := UserCollection.Find(ctx, bson.M{"branch_id": branchID})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error fetching users"})
 			return

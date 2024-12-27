@@ -27,7 +27,7 @@ func CreateBranch() gin.HandlerFunc {
 			return
 		}
 
-		branch.Branch_ID = primitive.NewObjectID()
+		branch.Branch_ID = primitive.NewObjectID().String()
 		branch.Created_At = time.Now()
 		branch.Updated_At = time.Now()
 
@@ -74,14 +74,9 @@ func GetOneBranch() gin.HandlerFunc {
 		defer cancel()
 
 		branchID := c.Param("branch_id")
-		branchObjID, err := primitive.ObjectIDFromHex(branchID)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid branch ID"})
-			return
-		}
 
 		var branch models.Branch
-		err = BranchCollection.FindOne(ctx, bson.M{"_id": branchObjID}).Decode(&branch)
+		err := BranchCollection.FindOne(ctx, bson.M{"_id": branchID}).Decode(&branch)
 		if err != nil {
 			log.Printf("Error retrieving branch: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error retrieving branch", "details": err.Error()})
@@ -103,11 +98,6 @@ func UpdateBranch() gin.HandlerFunc {
 		defer cancel()
 
 		branchID := c.Param("branch_id")
-		branchObjID, err := primitive.ObjectIDFromHex(branchID)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid branch ID"})
-			return
-		}
 
 		userInfo, err := helpers.GetCurrentUser(c, database.UserCollection)
 		if err != nil {
@@ -121,12 +111,12 @@ func UpdateBranch() gin.HandlerFunc {
 			return
 		}
 
-		if userInfo.Branch_ID != branchObjID {
+		if userInfo.Branch_ID != branchID {
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Unauthorized Access"})
 			return
 		}
 
-		filter := bson.M{"_id": branchObjID}
+		filter := bson.M{"_id": branchID}
 		update := bson.M{
 			"$set": bson.M{
 				"name":       branch.Name,
@@ -153,13 +143,8 @@ func DeleteBranch() gin.HandlerFunc {
 		defer cancel()
 
 		branchID := c.Param("branch_id")
-		objID, err := primitive.ObjectIDFromHex(branchID)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid branch ID"})
-			return
-		}
 
-		_, err = BranchCollection.DeleteOne(ctx, bson.M{"_id": objID})
+		_, err := BranchCollection.DeleteOne(ctx, bson.M{"_id": branchID})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error deleting branch"})
 			return

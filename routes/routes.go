@@ -9,8 +9,8 @@ import (
 
 func UserRoutes(r *gin.Engine) {
 	publicRoutes := r.Group("/")
-	authRoutes := r.Group("/").Use(middlewares.Authentication())
-	adminRoutes := r.Group("/").Use(middlewares.Authentication()).Use(middlewares.Authorization([]int{2, 3, 100}))
+	authRoutes := r.Group("/").Use(middlewares.Authentication([]int{}))
+	adminRoutes := r.Group("/").Use(middlewares.Authentication([]int{2, 3, 100}))
 
 	publicRoutes.POST("/register", controllers.RegisterUser())
 	publicRoutes.POST("/verify", controllers.VerifyUser())
@@ -25,19 +25,47 @@ func UserRoutes(r *gin.Engine) {
 	adminRoutes.PUT("/update-user-role", controllers.UpdateUserRole())
 	adminRoutes.DELETE("/delete-user", controllers.DeleteUser())
 
-	authRoutes.Use(middlewares.Authorization([]int{3, 100})).POST("/create-user", controllers.CreateUser())
-	authRoutes.Use(middlewares.Authorization([]int{3, 100})).POST("/update-user-branch", controllers.UpdateUserBranch())
-	authRoutes.Use(middlewares.Authorization([]int{100})).POST("/get-all-users", controllers.GetAllUsers())
+	publicRoutes.Use(middlewares.Authentication([]int{3, 100})).POST("/create-user", controllers.CreateUser())
+	publicRoutes.Use(middlewares.Authentication([]int{3, 100})).POST("/update-user-branch", controllers.UpdateUserBranch())
+	publicRoutes.Use(middlewares.Authentication([]int{100})).POST("/get-all-users", controllers.GetAllUsers())
 }
 
 func BranchRoutes(r *gin.Engine) {
 	publicRoutes := r.Group("/")
-	adminRoutes := r.Group("/").Use(middlewares.Authentication()).Use(middlewares.Authorization([]int{3, 100}))
-	rootRoutes := r.Group("/").Use(middlewares.Authentication()).Use(middlewares.Authorization([]int{100}))
+	adminRoutes := r.Group("/").Use(middlewares.Authentication([]int{3, 100}))
+	rootRoutes := r.Group("/").Use(middlewares.Authentication([]int{100}))
 
-	publicRoutes.POST("/get-branch/:branch_id", controllers.GetOneBranch())
+	publicRoutes.GET("/get-one-branch/:branch_id", controllers.GetOneBranch())
+
 	adminRoutes.PUT("/update-branch/:branch_id", controllers.UpdateBranch())
 	adminRoutes.POST("/create-branch", controllers.CreateBranch())
-	adminRoutes.GET("/get-branches", controllers.GetBranches())
+	adminRoutes.GET("/get-all-branches", controllers.GetBranches())
+
 	rootRoutes.DELETE("/delete-branch/:branch_id", controllers.DeleteBranch())
+}
+
+func CategoryRoutes(r *gin.Engine) {
+	publicRoutes := r.Group("/")
+	adminRoutes := r.Group("/").Use(middlewares.Authentication([]int{2, 3, 100}))
+
+	publicRoutes.GET("/get-all-categories/:branch_id", controllers.GetAllCategories())
+	publicRoutes.GET("/get-one-category/:category_id", controllers.GetOneCategory())
+
+	adminRoutes.PUT("/update-category/:category_id", controllers.UpdateCategory())
+	adminRoutes.POST("/create-category", controllers.CreateCategory())
+	adminRoutes.DELETE("/delete-category/:category_id", controllers.DeleteCategory())
+}
+
+func MenuRoutes(r *gin.Engine) {
+	publicRoutes := r.Group("/")
+	adminRoutes := r.Group("/").Use(middlewares.Authentication([]int{2, 3, 100}))
+
+	publicRoutes.GET("/get-menus-by-branchID/:branch_id", controllers.GetAllMenusByBranchID())
+	publicRoutes.GET("/get-menus-by-categoryID/:category_id", controllers.GetAllMenusByCategoryID())
+	publicRoutes.GET("/get-one-menu/:menu_id", controllers.GetOneMenu())
+	publicRoutes.GET("/search-menu", controllers.SearchMenu())
+
+	adminRoutes.PUT("/update-menu/:menu_id", controllers.UpdateMenu())
+	adminRoutes.POST("/create-menu", controllers.CreateMenu())
+	adminRoutes.DELETE("/delete-menu/:menu_id", controllers.DeleteMenu())
 }

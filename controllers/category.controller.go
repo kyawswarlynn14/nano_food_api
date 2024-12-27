@@ -37,7 +37,7 @@ func CreateCategory() gin.HandlerFunc {
 			return
 		}
 
-		category.Category_ID = primitive.NewObjectID()
+		category.Category_ID = primitive.NewObjectID().String()
 		category.Created_At = time.Now()
 		category.Updated_At = time.Now()
 
@@ -57,20 +57,27 @@ func GetAllCategories() gin.HandlerFunc {
 		defer cancel()
 
 		branchID := c.Param("branch_id")
-		branchObjID, err := primitive.ObjectIDFromHex(branchID)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid branch ID"})
-			return
+
+		// MongoDB Aggregation Pipeline
+		pipeline := mongo.Pipeline{
+			{{Key: "$match", Value: bson.M{"branch_id": branchID}}},
+			{{Key: "$lookup", Value: bson.M{
+				"from":         "branches",
+				"localField":   "branch_id",
+				"foreignField": "_id",
+				"as":           "branch",
+			}}},
+			{{Key: "$unwind", Value: bson.M{"path": "$branch", "preserveNullAndEmptyArrays": true}}},
 		}
 
-		var categories []models.Category
-		cursor, err := CategoryCollection.Find(ctx, bson.M{"branch_id": branchObjID})
+		cursor, err := CategoryCollection.Aggregate(ctx, pipeline)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error retrieving categories"})
 			return
 		}
 		defer cursor.Close(ctx)
 
+		var categories []bson.M
 		if err := cursor.All(ctx, &categories); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error decoding categories"})
 			return
@@ -78,7 +85,7 @@ func GetAllCategories() gin.HandlerFunc {
 
 		c.JSON(http.StatusOK, gin.H{
 			"success": true,
-			"message": "categories retrieved successfully",
+			"message": "Categories retrieved successfully",
 			"data":    categories,
 		})
 	}
@@ -90,24 +97,41 @@ func GetOneCategory() gin.HandlerFunc {
 		defer cancel()
 
 		categoryID := c.Param("category_id")
-		categoryObjID, err := primitive.ObjectIDFromHex(categoryID)
+
+		// MongoDB Aggregation Pipeline
+		pipeline := mongo.Pipeline{
+			{{Key: "$match", Value: bson.M{"_id": categoryID}}},
+			{{Key: "$lookup", Value: bson.M{
+				"from":         "branches",
+				"localField":   "branch_id",
+				"foreignField": "_id",
+				"as":           "branch",
+			}}},
+			{{Key: "$unwind", Value: bson.M{"path": "$branch", "preserveNullAndEmptyArrays": true}}},
+		}
+
+		cursor, err := CategoryCollection.Aggregate(ctx, pipeline)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid category ID"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error retrieving category"})
+			return
+		}
+		defer cursor.Close(ctx)
+
+		var categories []bson.M
+		if err := cursor.All(ctx, &categories); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error decoding category"})
 			return
 		}
 
-		var category models.Category
-		err = CategoryCollection.FindOne(ctx, bson.M{"_id": categoryObjID}).Decode(&category)
-		if err != nil {
-			log.Printf("Error retrieving category: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error retrieving category", "details": err.Error()})
+		if len(categories) == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Category not found"})
 			return
 		}
 
 		c.JSON(http.StatusOK, gin.H{
 			"success": true,
-			"message": "category retrieved successfully",
-			"data":    category,
+			"message": "Category retrieved successfully",
+			"data":    categories[0],
 		})
 	}
 }
@@ -118,11 +142,6 @@ func UpdateCategory() gin.HandlerFunc {
 		defer cancel()
 
 		categoryID := c.Param("category_id")
-		categoryObjID, err := primitive.ObjectIDFromHex(categoryID)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid category ID"})
-			return
-		}
 
 		userInfo, err := helpers.GetCurrentUser(c, database.UserCollection)
 		if err != nil {
@@ -141,7 +160,7 @@ func UpdateCategory() gin.HandlerFunc {
 			return
 		}
 
-		filter := bson.M{"_id": categoryObjID}
+		filter := bson.M{"_id": categoryID}
 		update := bson.M{
 			"$set": bson.M{
 				"title":       category.Title,
@@ -160,17 +179,12 @@ func UpdateCategory() gin.HandlerFunc {
 	}
 }
 
-func Deletecategory() gin.HandlerFunc {
+func DeleteCategory() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 		defer cancel()
 
 		categoryID := c.Param("category_id")
-		categoryObjID, err := primitive.ObjectIDFromHex(categoryID)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid category ID"})
-			return
-		}
 
 		userInfo, err := helpers.GetCurrentUser(c, database.UserCollection)
 		if err != nil {
@@ -179,7 +193,7 @@ func Deletecategory() gin.HandlerFunc {
 		}
 
 		var category models.Category
-		err = CategoryCollection.FindOne(ctx, bson.M{"_id": categoryObjID}).Decode(&category)
+		err = CategoryCollection.FindOne(ctx, bson.M{"_id": categoryID}).Decode(&category)
 		if err != nil {
 			log.Printf("Error retrieving category: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error retrieving category", "details": err.Error()})
@@ -191,7 +205,7 @@ func Deletecategory() gin.HandlerFunc {
 			return
 		}
 
-		_, err = CategoryCollection.DeleteOne(ctx, bson.M{"_id": categoryObjID})
+		_, err = CategoryCollection.DeleteOne(ctx, bson.M{"_id": categoryID})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error deleting category"})
 			return

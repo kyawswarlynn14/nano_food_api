@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 	"nano_food_api/models"
 
 	firebase "firebase.google.com/go"
+	"firebase.google.com/go/storage"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -46,6 +48,52 @@ func InitializeFirebaseApp() (*firebase.App, error) {
 	return app, nil
 }
 
+func UploadFileToFirebase(client *storage.Client, file io.Reader, filename string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*50)
+	defer cancel()
+
+	bucket, err := client.DefaultBucket()
+	if err != nil {
+		return "", err
+	}
+
+	writer := bucket.Object(filename).NewWriter(ctx)
+	writer.ContentType = "image/*"
+
+	if _, err := io.Copy(writer, file); err != nil {
+		return "", err
+	}
+
+	if err := writer.Close(); err != nil {
+		return "", err
+	}
+
+	bucketAttrs, err := bucket.Attrs(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf("https://storage.googleapis.com/%s/%s", bucketAttrs.Name, filename), nil
+}
+
+func DeleteFileFromFirebase(client *storage.Client, filePath string) error {
+	ctx := context.Background()
+
+	bucket, err := client.DefaultBucket()
+	if err != nil {
+		return fmt.Errorf("failed to get default bucket: %v", err)
+	}
+
+	object := bucket.Object(filePath)
+
+	err = object.Delete(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to delete file from Firebase Storage: %v", err)
+	}
+
+	return nil
+}
+
 func SendEmail(recept_mail string, subject string, body string) error {
 	SMIP_HOST := os.Getenv("SMIP_HOST")
 	SMIP_PORT, portErr := strconv.Atoi(os.Getenv("SMIP_PORT"))
@@ -72,23 +120,18 @@ func SendEmail(recept_mail string, subject string, body string) error {
 	return nil
 }
 
-func GetUserIDFromMdw(c *gin.Context) (user_obj_id primitive.ObjectID, err error) {
+func GetUserIDFromMdw(c *gin.Context) (user_obj_id string, err error) {
 	userIDFromMdw, exists := c.Get("userId")
 	if !exists {
-		return primitive.NilObjectID, fmt.Errorf("user ID not found in request context")
+		return primitive.NilObjectID.String(), fmt.Errorf("user ID not found in request context")
 	}
 
 	userIDStr, ok := userIDFromMdw.(string)
 	if !ok {
-		return primitive.NilObjectID, fmt.Errorf("invalid user ID format")
+		return primitive.NilObjectID.String(), fmt.Errorf("invalid user ID format")
 	}
 
-	objID, err := primitive.ObjectIDFromHex(userIDStr)
-	if err != nil {
-		return primitive.NilObjectID, fmt.Errorf("invalid user ID")
-	}
-
-	return objID, nil
+	return userIDStr, nil
 }
 
 func GetCurrentUser(c *gin.Context, userCollection *mongo.Collection) (models.User, error) {
@@ -105,22 +148,25 @@ func GetCurrentUser(c *gin.Context, userCollection *mongo.Collection) (models.Us
 		return models.User{}, fmt.Errorf("invalid user ID format")
 	}
 
-	objID, err := primitive.ObjectIDFromHex(userIDStr)
-	if err != nil {
-		return models.User{}, fmt.Errorf("invalid user ID")
-	}
-
 	var user models.User
-	err = userCollection.FindOne(ctx, bson.M{"_id": objID}).Decode(&user)
+	err := userCollection.FindOne(ctx, bson.M{"_id": userIDStr}).Decode(&user)
 	if err != nil {
 		return models.User{}, err
 	}
 
-	if user.User_ID.IsZero() {
+	if user.User_ID == "" {
 		return models.User{}, fmt.Errorf("user not found")
 	}
 
 	return user, nil
+}
+
+func CheckDataExist(ctx context.Context, collection *mongo.Collection, filter bson.M) (bool, error) {
+	count, err := collection.CountDocuments(ctx, filter)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
 
 func Contains(slice []int, item int) bool {
@@ -130,4 +176,12 @@ func Contains(slice []int, item int) bool {
 		}
 	}
 	return false
+}
+
+func ParseFloat(value string) float64 {
+	result, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return 0.0
+	}
+	return result
 }
