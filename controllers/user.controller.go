@@ -3,9 +3,9 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	database "nano_food_api/database"
@@ -65,7 +65,7 @@ func RegisterUser() gin.HandlerFunc {
 		verificationCode := fmt.Sprintf("%06d", time.Now().UnixNano()%1000000)
 		user.VerificationCode = verificationCode
 		user.IsVerified = false
-		user.User_ID = primitive.NewObjectID().String()
+		user.User_ID = primitive.NewObjectID().Hex()
 		user.Role = 0
 		user.Created_At = time.Now()
 		user.Updated_At = time.Now()
@@ -192,9 +192,10 @@ func CreateUser() gin.HandlerFunc {
 		user.Password = hashedPassword
 
 		// Create user
-		user.User_ID = primitive.NewObjectID().String()
+		user.User_ID = primitive.NewObjectID().Hex()
 		user.Created_At = time.Now()
 		user.Updated_At = time.Now()
+		user.IsVerified = true
 
 		_, err = UserCollection.InsertOne(ctx, user)
 		if err != nil {
@@ -285,7 +286,6 @@ func UpdateUserInfo() gin.HandlerFunc {
 
 		var updateData struct {
 			Name    string `json:"name"`
-			Email   string `json:"email"`
 			Avatar  string `json:"avatar"`
 			Address string `json:"address"`
 			Nrc     string `json:"nrc"`
@@ -298,26 +298,9 @@ func UpdateUserInfo() gin.HandlerFunc {
 			return
 		}
 
-		if updateData.Email != "" {
-			var existingUser models.User
-			err := UserCollection.FindOne(ctx, bson.M{"email": updateData.Email}).Decode(&existingUser)
-			if err == nil && existingUser.User_ID != user_id {
-				c.JSON(http.StatusConflict, gin.H{"success": false, "error": "Email is already in use"})
-				return
-			}
-			if err != nil && err != mongo.ErrNoDocuments {
-				log.Printf("Error checking email: %v", err)
-				c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error checking email"})
-				return
-			}
-		}
-
 		updateFields := bson.M{}
 		if updateData.Name != "" {
 			updateFields["name"] = updateData.Name
-		}
-		if updateData.Email != "" {
-			updateFields["email"] = updateData.Email
 		}
 		if updateData.Avatar != "" {
 			updateFields["avatar"] = updateData.Avatar
@@ -370,69 +353,56 @@ func UploadAvatar() gin.HandlerFunc {
 
 		client, err := app.Storage(context.Background())
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to connect to Firebase Storage"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to connect to Firebase Storage", "details": err.Error()})
+			fmt.Printf("Firebase error >>> %v \n", err)
 			return
 		}
 
-		file, header, err := c.Request.FormFile("avatar")
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Failed to retrieve avatar file"})
-			return
-		}
-		defer file.Close()
+		userInfo, _ := helpers.GetCurrentUser(c, UserCollection)
 
-		bucket, err := client.DefaultBucket()
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to get default bucket"})
-			return
-		}
-		filename := fmt.Sprintf("avatars/%d_%s", time.Now().Unix(), header.Filename)
-
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*50)
-		defer cancel()
-
-		writer := bucket.Object(filename).NewWriter(ctx)
-		writer.ContentType = header.Header.Get("Content-Type")
-
-		if _, err := io.Copy(writer, file); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to upload avatar"})
-			return
+		if userInfo.Avatar != "" {
+			deleteErr := helpers.DeleteFileFromFirebase(client, userInfo.Avatar)
+			if deleteErr != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to delete old avatar", "details": deleteErr.Error()})
+				return
+			}
 		}
 
-		if err := writer.Close(); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to finalize avatar upload"})
+		avatarFile, avatarHeader, err := c.Request.FormFile("avatar")
+		if err == nil {
+			defer avatarFile.Close()
+			avatarURL, uploadErr := helpers.UploadFileToFirebase(client, avatarFile, fmt.Sprintf("avatars/%d_%s", time.Now().Unix(), avatarHeader.Filename))
+			if uploadErr != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to upload avatar", "details": uploadErr.Error()})
+				return
+			}
+
+			user_id, err := helpers.GetUserIDFromMdw(c)
+			if err != nil {
+				c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": err.Error()})
+				return
+			}
+
+			var ctxUpdate, cancelUpdate = context.WithTimeout(context.Background(), 100*time.Second)
+			defer cancelUpdate()
+
+			filter := bson.M{"_id": user_id}
+			update := bson.M{"$set": bson.M{"avatar": avatarURL, "updated_at": time.Now()}}
+			_, err = UserCollection.UpdateOne(ctxUpdate, filter, update)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to update user avatar"})
+				return
+			}
+
+			c.JSON(http.StatusOK, gin.H{
+				"success":   true,
+				"message":   "Avatar uploaded and updated successfully",
+				"avatarURL": avatarURL,
+			})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
 			return
 		}
-
-		bucketAttrs, err := bucket.Attrs(ctx)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to get bucket attributes"})
-			return
-		}
-		avatarURL := fmt.Sprintf("https://storage.googleapis.com/%s/%s", bucketAttrs.Name, filename)
-
-		user_id, err := helpers.GetUserIDFromMdw(c)
-		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": err.Error()})
-			return
-		}
-
-		var ctxUpdate, cancelUpdate = context.WithTimeout(context.Background(), 100*time.Second)
-		defer cancelUpdate()
-
-		filter := bson.M{"_id": user_id}
-		update := bson.M{"$set": bson.M{"avatar": avatarURL, "updated_at": time.Now()}}
-		_, err = UserCollection.UpdateOne(ctxUpdate, filter, update)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to update user avatar"})
-			return
-		}
-
-		c.JSON(http.StatusOK, gin.H{
-			"success":   true,
-			"message":   "Avatar uploaded and updated successfully",
-			"avatarURL": avatarURL,
-		})
 	}
 }
 
@@ -621,25 +591,19 @@ func DeleteUser() gin.HandlerFunc {
 		var ctx, cancel = context.WithTimeout(context.Background(), 100*time.Second)
 		defer cancel()
 
-		var reqBody struct {
-			User_ID   string `json:"user_id" binding:"required"`
-			Branch_ID string `json:"branch_id" binding:"required"`
-		}
-		if err := c.BindJSON(&reqBody); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error()})
-			return
-		}
+		User_ID := c.Param("user_id")
+		Branch_ID := c.Param("branch_id")
 
 		// Fetch branch details
 		var branch models.Branch
-		err := BranchCollection.FindOne(ctx, bson.M{"_id": reqBody.Branch_ID}).Decode(&branch)
+		err := BranchCollection.FindOne(ctx, bson.M{"_id": Branch_ID}).Decode(&branch)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Branch not found"})
 			return
 		}
 
 		var user models.User
-		err = UserCollection.FindOne(ctx, bson.M{"_id": reqBody.User_ID}).Decode(&user)
+		err = UserCollection.FindOne(ctx, bson.M{"_id": User_ID}).Decode(&user)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "User not found"})
 			return
@@ -663,7 +627,7 @@ func DeleteUser() gin.HandlerFunc {
 			}
 		}
 
-		result, err := UserCollection.DeleteOne(ctx, bson.M{"_id": reqBody.User_ID})
+		result, err := UserCollection.DeleteOne(ctx, bson.M{"_id": User_ID})
 		if err != nil {
 			log.Printf("Error deleting user: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error deleting user"})
@@ -710,17 +674,26 @@ func GetAllBranchUsers() gin.HandlerFunc {
 			}
 		}
 
-		// Find all users who are members of the branch
-		cursor, err := UserCollection.Find(ctx, bson.M{"branch_id": branchID})
+		pipeline := mongo.Pipeline{
+			{{Key: "$match", Value: bson.M{"branch_id": branchID}}},
+			{{Key: "$lookup", Value: bson.M{
+				"from":         "branches",
+				"localField":   "branch_id",
+				"foreignField": "_id",
+				"as":           "branch",
+			}}},
+			{{Key: "$unwind", Value: bson.M{"path": "$branch", "preserveNullAndEmptyArrays": true}}},
+		}
+
+		cursor, err := UserCollection.Aggregate(ctx, pipeline)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error fetching users"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error retrieving users"})
 			return
 		}
 		defer cursor.Close(ctx)
 
-		// Decode users into a slice
-		var users []models.User
-		if err = cursor.All(ctx, &users); err != nil {
+		var users []bson.M
+		if err := cursor.All(ctx, &users); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error decoding users"})
 			return
 		}
@@ -742,31 +715,31 @@ func GetAllUsers() gin.HandlerFunc {
 
 		role := c.Query("role")
 		if role != "" {
-			filter["role"] = role
+			roleInt, _ := strconv.Atoi(role)
+			filter["role"] = roleInt
 		}
 
-		var users []models.User
-		cursor, err := UserCollection.Find(ctx, filter)
+		pipeline := mongo.Pipeline{
+			{{Key: "$match", Value: filter}},
+			{{Key: "$lookup", Value: bson.M{
+				"from":         "branches",
+				"localField":   "branch_id",
+				"foreignField": "_id",
+				"as":           "branch",
+			}}},
+			{{Key: "$unwind", Value: bson.M{"path": "$branch", "preserveNullAndEmptyArrays": true}}},
+		}
+
+		cursor, err := UserCollection.Aggregate(ctx, pipeline)
 		if err != nil {
-			log.Printf("Error finding users: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error retrieving users"})
 			return
 		}
 		defer cursor.Close(ctx)
 
-		for cursor.Next(ctx) {
-			var user models.User
-			if err := cursor.Decode(&user); err != nil {
-				log.Printf("Error decoding user: %v", err)
-				c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error decoding user"})
-				return
-			}
-			users = append(users, user)
-		}
-
-		if err := cursor.Err(); err != nil {
-			log.Printf("Cursor error: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error iterating over users"})
+		var users []bson.M
+		if err := cursor.All(ctx, &users); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error decoding users"})
 			return
 		}
 

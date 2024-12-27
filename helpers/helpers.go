@@ -8,10 +8,12 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"nano_food_api/models"
 
+	cloudStorage "cloud.google.com/go/storage"
 	firebase "firebase.google.com/go"
 	"firebase.google.com/go/storage"
 	"github.com/gin-gonic/gin"
@@ -37,10 +39,14 @@ func CheckPassword(hashedPassword, plainPassword string) bool {
 }
 
 func InitializeFirebaseApp() (*firebase.App, error) {
-	serviceAccountKeyPath := "../keys/se-reactjs-firebase-adminsdk.json"
+	serviceAccountKeyPath := "keys/se-reactjs-firebase-adminsdk.json"
 	opt := option.WithCredentialsFile(serviceAccountKeyPath)
 
-	app, err := firebase.NewApp(context.Background(), nil, opt)
+	config := &firebase.Config{
+		StorageBucket: os.Getenv("STORAGE_BUCKET"),
+	}
+
+	app, err := firebase.NewApp(context.Background(), config, opt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize Firebase app: %v", err)
 	}
@@ -58,7 +64,7 @@ func UploadFileToFirebase(client *storage.Client, file io.Reader, filename strin
 	}
 
 	writer := bucket.Object(filename).NewWriter(ctx)
-	writer.ContentType = "image/*"
+	writer.ContentType = "image/" + strings.Split(filename, ".")[1]
 
 	if _, err := io.Copy(writer, file); err != nil {
 		return "", err
@@ -66,6 +72,12 @@ func UploadFileToFirebase(client *storage.Client, file io.Reader, filename strin
 
 	if err := writer.Close(); err != nil {
 		return "", err
+	}
+
+	object := bucket.Object(filename)
+	acl := object.ACL()
+	if err := acl.Set(ctx, cloudStorage.AllUsers, cloudStorage.RoleReader); err != nil {
+		return "", fmt.Errorf("failed to set public read access: %v", err)
 	}
 
 	bucketAttrs, err := bucket.Attrs(ctx)
@@ -84,7 +96,12 @@ func DeleteFileFromFirebase(client *storage.Client, filePath string) error {
 		return fmt.Errorf("failed to get default bucket: %v", err)
 	}
 
-	object := bucket.Object(filePath)
+	storageBucket := os.Getenv("STORAGE_BUCKET") + "/"
+
+	newFilePatch := strings.Split(filePath, storageBucket)[1]
+	fmt.Println("Deleting file from path: ", newFilePatch)
+
+	object := bucket.Object(newFilePatch)
 
 	err = object.Delete(ctx)
 	if err != nil {

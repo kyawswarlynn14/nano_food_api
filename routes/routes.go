@@ -23,11 +23,11 @@ func UserRoutes(r *gin.Engine) {
 
 	adminRoutes.GET("/get-branch-users/:branch_id", controllers.GetAllBranchUsers())
 	adminRoutes.PUT("/update-user-role", controllers.UpdateUserRole())
-	adminRoutes.DELETE("/delete-user", controllers.DeleteUser())
+	adminRoutes.DELETE("/delete-user/:user_id/:branch_id", controllers.DeleteUser())
 
 	publicRoutes.Use(middlewares.Authentication([]int{3, 100})).POST("/create-user", controllers.CreateUser())
-	publicRoutes.Use(middlewares.Authentication([]int{3, 100})).POST("/update-user-branch", controllers.UpdateUserBranch())
-	publicRoutes.Use(middlewares.Authentication([]int{100})).POST("/get-all-users", controllers.GetAllUsers())
+	publicRoutes.Use(middlewares.Authentication([]int{3, 100})).PUT("/update-user-branch", controllers.UpdateUserBranch())
+	publicRoutes.Use(middlewares.Authentication([]int{100})).GET("/get-all-users", controllers.GetAllUsers())
 }
 
 func BranchRoutes(r *gin.Engine) {
@@ -66,6 +66,9 @@ func MenuRoutes(r *gin.Engine) {
 	publicRoutes.GET("/search-menu", controllers.SearchMenu())
 
 	adminRoutes.PUT("/update-menu/:menu_id", controllers.UpdateMenu())
+	adminRoutes.PUT("/add-menu-addon/:menu_id", controllers.AddMenuAddOn())
+	adminRoutes.PUT("/update-menu-addon/:menu_id/:add_on_id", controllers.UpdateMenuAddOn())
+	adminRoutes.PUT("/remove-menu-addon/:menu_id/:add_on_id", controllers.RemoveMenuAddOn())
 	adminRoutes.POST("/create-menu", controllers.CreateMenu())
 	adminRoutes.DELETE("/delete-menu/:menu_id", controllers.DeleteMenu())
 }

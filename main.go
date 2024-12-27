@@ -29,7 +29,7 @@ func main() {
 
 	rate := limiter.Rate{
 		Period: 1 * time.Minute,
-		Limit:  5,
+		Limit:  20,
 	}
 	store := memory.NewStore()
 
@@ -56,6 +56,7 @@ func main() {
 	// Routes
 	routes.UserRoutes(router)
 	routes.BranchRoutes(router)
+	routes.CategoryRoutes(router)
 	routes.MenuRoutes(router)
 
 	log.Fatal(router.Run(":" + port))

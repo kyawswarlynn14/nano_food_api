@@ -27,7 +27,7 @@ func CreateBranch() gin.HandlerFunc {
 			return
 		}
 
-		branch.Branch_ID = primitive.NewObjectID().String()
+		branch.Branch_ID = primitive.NewObjectID().Hex()
 		branch.Created_At = time.Now()
 		branch.Updated_At = time.Now()
 
@@ -111,7 +111,7 @@ func UpdateBranch() gin.HandlerFunc {
 			return
 		}
 
-		if userInfo.Branch_ID != branchID {
+		if userInfo.Role != 100 && userInfo.Branch_ID != branchID {
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Unauthorized Access"})
 			return
 		}
@@ -119,10 +119,11 @@ func UpdateBranch() gin.HandlerFunc {
 		filter := bson.M{"_id": branchID}
 		update := bson.M{
 			"$set": bson.M{
-				"name":       branch.Name,
-				"address":    branch.Address,
-				"contact":    branch.Contact,
-				"updated_at": time.Now(),
+				"name":        branch.Name,
+				"address":     branch.Address,
+				"description": branch.Description,
+				"contact":     branch.Contact,
+				"updated_at":  time.Now(),
 			},
 		}
 

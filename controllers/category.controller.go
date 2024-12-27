@@ -37,7 +37,7 @@ func CreateCategory() gin.HandlerFunc {
 			return
 		}
 
-		category.Category_ID = primitive.NewObjectID().String()
+		category.Category_ID = primitive.NewObjectID().Hex()
 		category.Created_At = time.Now()
 		category.Updated_At = time.Now()
 
@@ -155,7 +155,7 @@ func UpdateCategory() gin.HandlerFunc {
 			return
 		}
 
-		if userInfo.Branch_ID != category.Branch_ID {
+		if userInfo.Role != 100 && userInfo.Branch_ID != category.Branch_ID {
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Unauthorized Access"})
 			return
 		}
@@ -200,7 +200,7 @@ func DeleteCategory() gin.HandlerFunc {
 			return
 		}
 
-		if userInfo.Branch_ID != category.Branch_ID {
+		if userInfo.Role != 100 && userInfo.Branch_ID != category.Branch_ID {
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Unauthorized Access"})
 			return
 		}

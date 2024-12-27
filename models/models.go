@@ -48,12 +48,13 @@ User Roles
 **/
 
 type Branch struct {
-	Branch_ID  string    `json:"_id" bson:"_id"`
-	Name       string    `json:"name" bson:"name"`
-	Address    string    `json:"address" bson:"address"`
-	Contact    string    `json:"contact" bson:"contact"`
-	Created_At time.Time `json:"created_at" bson:"created_at"`
-	Updated_At time.Time `json:"updated_at" bson:"updated_at"`
+	Branch_ID   string    `json:"_id" bson:"_id"`
+	Name        string    `json:"name" bson:"name"`
+	Description string    `json:"description" bson:"description"`
+	Address     string    `json:"address" bson:"address"`
+	Contact     string    `json:"contact" bson:"contact"`
+	Created_At  time.Time `json:"created_at" bson:"created_at"`
+	Updated_At  time.Time `json:"updated_at" bson:"updated_at"`
 }
 
 type Category struct {
@@ -70,7 +71,7 @@ type AddOn struct {
 	Title       string  `json:"title" bson:"title"`
 	Price       float64 `json:"price" bson:"price"`
 	Cover       string  `json:"cover,omitempty" bson:"cover,omitempty"`
-	Note        string  `json:"note" bson:"note"`
+	Description string  `json:"description" bson:"description"`
 	IsAvailable bool    `json:"is_available" bson:"is_available"`
 }
 
@@ -86,7 +87,6 @@ type Menu struct {
 	Images      []string  `json:"images,omitempty" bson:"images,omitempty"`
 	IsAvailable bool      `json:"is_available" bson:"is_available"`
 	AddOns      []AddOn   `json:"add_ons,omitempty" bson:"add_ons,omitempty"`
-	Note        string    `json:"note" bson:"note"`
 	Created_At  time.Time `json:"created_at" bson:"created_at"`
 	Updated_At  time.Time `json:"updated_at" bson:"updated_at"`
 }
