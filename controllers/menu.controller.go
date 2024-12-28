@@ -3,7 +3,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"mime/multipart"
 	"net/http"
 	"strconv"
 	"time"
@@ -30,10 +29,6 @@ category_id: "category_id_here"
 branch_id: "branch_id_here"
 menu_cover: <file>         # Single menu cover image
 menu_images: <file[]>      # Multiple menu images
-add_on_title: ["Cheese", "Pepperoni"] # Add-on titles
-add_on_description: ["note 1", "note 2"]    # Add-on descriptions
-add_on_price: [2.0, 3.0]             # Add-on prices
-add_on_images: <file[]>              # Add-on images
 
 **/
 
@@ -41,13 +36,13 @@ func CreateMenu() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		app, err := helpers.InitializeFirebaseApp()
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to initialize Firebase"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to initialize Firebase", "details": err.Error()})
 			return
 		}
 
 		client, err := app.Storage(context.Background())
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to connect to Firebase Storage"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to connect to Firebase Storage", "details": err.Error()})
 			return
 		}
 
@@ -62,6 +57,7 @@ func CreateMenu() gin.HandlerFunc {
 		menu.Short_Title = c.PostForm("short_title")
 		menu.Description = c.PostForm("description")
 		menu.Price = helpers.ParseFloat(c.PostForm("price"))
+		menu.Discount = helpers.ParseFloat(c.PostForm("discount"))
 
 		if menu.Category_ID == "" || menu.Branch_ID == "" || menu.Title == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Missing required fields"})
@@ -70,7 +66,7 @@ func CreateMenu() gin.HandlerFunc {
 
 		branchExists, err := helpers.CheckDataExist(ctx, database.BranchCollection, bson.M{"_id": menu.Branch_ID})
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to validate branch"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to validate branch", "details": err.Error()})
 			return
 		}
 		if !branchExists {
@@ -80,7 +76,7 @@ func CreateMenu() gin.HandlerFunc {
 
 		categoryExists, err := helpers.CheckDataExist(ctx, database.CategoryCollection, bson.M{"_id": menu.Category_ID})
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to validate category"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to validate category", "details": err.Error()})
 			return
 		}
 		if !categoryExists {
@@ -125,54 +121,6 @@ func CreateMenu() gin.HandlerFunc {
 			}
 			menu.Images = menuImageURLs
 		}
-
-		// Handle add-on data and images
-		addOns := []models.AddOn{}
-		addOnTitles := c.PostFormArray("add_on_title")
-		addOnDescriptions := c.PostFormArray("add_on_description")
-		addOnPrices := c.PostFormArray("add_on_price")
-
-		addOnFiles, ok := menuImages.File["add_on_images"]
-		if !ok {
-			addOnFiles = []*multipart.FileHeader{}
-		}
-
-		for i, addOnTitle := range addOnTitles {
-			price := 0.0
-			if i < len(addOnPrices) {
-				price = helpers.ParseFloat(addOnPrices[i])
-			}
-
-			description := ""
-			if i < len(addOnDescriptions) {
-				description = addOnDescriptions[i]
-			}
-
-			var addOnImageURL string
-			if i < len(addOnFiles) {
-				file, err := addOnFiles[i].Open()
-				if err == nil {
-					defer file.Close()
-
-					addOnImageURL, err = helpers.UploadFileToFirebase(client, file, fmt.Sprintf("addons/%d_%s", time.Now().Unix(), addOnFiles[i].Filename))
-					if err != nil {
-						c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to upload add-on image", "details": err.Error()})
-						return
-					}
-				}
-			}
-
-			addOn := models.AddOn{
-				AddOn_ID:    primitive.NewObjectID().Hex(),
-				Title:       addOnTitle,
-				Price:       price,
-				Cover:       addOnImageURL,
-				Description: description,
-				IsAvailable: true,
-			}
-			addOns = append(addOns, addOn)
-		}
-		menu.AddOns = addOns
 
 		// Save menu to MongoDB
 		_, err = MenuCollection.InsertOne(ctx, menu)
@@ -223,6 +171,7 @@ func UpdateMenu() gin.HandlerFunc {
 		menuUpdate.Short_Title = c.PostForm("short_title")
 		menuUpdate.Description = c.PostForm("description")
 		menuUpdate.Price = helpers.ParseFloat(c.PostForm("price"))
+		menuUpdate.Discount = helpers.ParseFloat(c.PostForm("discount"))
 		isAvaliable := true
 		if c.PostForm("is_avaliable") == "false" {
 			isAvaliable = false
@@ -267,6 +216,9 @@ func UpdateMenu() gin.HandlerFunc {
 		}
 		if menuUpdate.Price > 0 {
 			updateFields["price"] = menuUpdate.Price
+		}
+		if menuUpdate.Discount > 0 {
+			updateFields["discount"] = menuUpdate.Discount
 		}
 
 		// Handle menu cover update
@@ -337,230 +289,6 @@ func UpdateMenu() gin.HandlerFunc {
 	}
 }
 
-func AddMenuAddOn() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		menuID := c.Param("menu_id")
-
-		var ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-
-		// Find existing menu
-		var existingMenu models.Menu
-		err := MenuCollection.FindOne(ctx, bson.M{"_id": menuID}).Decode(&existingMenu)
-		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Menu not found", "details": err.Error()})
-			return
-		}
-
-		// Parse add-on data from request
-		addOnTitle := c.PostForm("add_on_title")
-		addOnDescription := c.PostForm("add_on_description")
-		addOnPrice := helpers.ParseFloat(c.PostForm("add_on_price"))
-
-		// Upload add-on image
-		app, err := helpers.InitializeFirebaseApp()
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to initialize Firebase", "details": err.Error()})
-			return
-		}
-
-		client, err := app.Storage(context.Background())
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to connect to Firebase Storage", "details": err.Error()})
-			return
-		}
-
-		var addOnImageURL string
-		addOnImageFile, addOnImageHeader, err := c.Request.FormFile("add_on_image")
-		if err == nil {
-			defer addOnImageFile.Close()
-			addOnImageURL, err = helpers.UploadFileToFirebase(client, addOnImageFile, fmt.Sprintf("addons/%d_%s", time.Now().Unix(), addOnImageHeader.Filename))
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to upload add-on image", "details": err.Error()})
-				return
-			}
-		}
-
-		// Create add-on object
-		addOn := models.AddOn{
-			AddOn_ID:    primitive.NewObjectID().Hex(),
-			Title:       addOnTitle,
-			Description: addOnDescription,
-			Price:       addOnPrice,
-			Cover:       addOnImageURL,
-			IsAvailable: true,
-		}
-
-		// Update menu with the new add-on
-		_, err = MenuCollection.UpdateOne(ctx, bson.M{"_id": menuID}, bson.M{"$push": bson.M{"add_ons": addOn}})
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to add add-on", "details": err.Error()})
-			return
-		}
-
-		c.JSON(http.StatusOK, gin.H{
-			"success": true,
-			"message": "Add-on added successfully",
-			"add_on":  addOn,
-		})
-	}
-}
-
-func UpdateMenuAddOn() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		app, err := helpers.InitializeFirebaseApp()
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to initialize Firebase"})
-			return
-		}
-
-		client, err := app.Storage(context.Background())
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to connect to Firebase Storage"})
-			return
-		}
-
-		menuID := c.Param("menu_id")
-		addOnID := c.Param("add_on_id")
-
-		var ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-
-		// Find the menu containing the add-on
-		var menu models.Menu
-		err = MenuCollection.FindOne(ctx, bson.M{"_id": menuID}).Decode(&menu)
-		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Menu not found"})
-			return
-		}
-
-		// Parse the updated add-on data from the request body
-		var updatedAddOn models.AddOn
-		updatedAddOn.Title = c.PostForm("add_on_title")
-		updatedAddOn.Description = c.PostForm("add_on_description")
-		updatedAddOn.Price = helpers.ParseFloat(c.PostForm("add_on_price"))
-		isAvailable := true
-		if c.PostForm("is_available") == "false" {
-			isAvailable = false
-		}
-		updatedAddOn.IsAvailable = isAvailable
-
-		// Locate the add-on to update
-		var found bool
-		for i, addOn := range menu.AddOns {
-			if addOn.AddOn_ID == addOnID {
-				addOnFile, addOnHeader, err := c.Request.FormFile("add_on_image")
-				if err == nil {
-					defer addOnFile.Close()
-
-					if addOn.Cover != "" {
-						deleteErr := helpers.DeleteFileFromFirebase(client, addOn.Cover)
-						if deleteErr != nil {
-							fmt.Println("Failed to delete old add on image", deleteErr)
-						}
-					}
-
-					// Upload new add on cover
-					addOnImageURL, uploadErr := helpers.UploadFileToFirebase(client, addOnFile, fmt.Sprintf("addons/%d_%s", time.Now().Unix(), addOnHeader.Filename))
-					if uploadErr != nil {
-						c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to upload add on image", "details": uploadErr.Error()})
-						return
-					}
-					addOn.Cover = addOnImageURL
-				}
-
-				// Update other add-on fields
-				addOn.Title = updatedAddOn.Title
-				addOn.Price = updatedAddOn.Price
-				addOn.Description = updatedAddOn.Description
-				addOn.IsAvailable = updatedAddOn.IsAvailable
-				menu.AddOns[i] = addOn
-				found = true
-				break
-			}
-		}
-
-		if !found {
-			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Add-on not found"})
-			return
-		}
-
-		// Save the updated menu back to MongoDB
-		_, err = MenuCollection.UpdateOne(ctx, bson.M{"_id": menuID}, bson.M{"$set": bson.M{"add_ons": menu.AddOns}})
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to update menu", "details": err.Error()})
-			return
-		}
-
-		c.JSON(http.StatusOK, gin.H{
-			"success": true,
-			"message": "Add-on updated successfully",
-		})
-	}
-}
-
-func RemoveMenuAddOn() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		app, err := helpers.InitializeFirebaseApp()
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to initialize Firebase"})
-			return
-		}
-
-		client, err := app.Storage(context.Background())
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to connect to Firebase Storage"})
-			return
-		}
-
-		menuID := c.Param("menu_id")
-		addOnID := c.Param("add_on_id")
-
-		var ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-
-		var menu models.Menu
-		err = MenuCollection.FindOne(ctx, bson.M{"_id": menuID}).Decode(&menu)
-		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Menu not found"})
-			return
-		}
-
-		var updatedAddOns []models.AddOn
-		var addOnToDelete *models.AddOn
-		for _, addOn := range menu.AddOns {
-			if addOn.AddOn_ID == addOnID {
-				addOnToDelete = &addOn
-			} else {
-				updatedAddOns = append(updatedAddOns, addOn)
-			}
-		}
-
-		if addOnToDelete == nil {
-			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Add-on not found"})
-			return
-		}
-
-		if addOnToDelete.Cover != "" {
-			deleteErr := helpers.DeleteFileFromFirebase(client, addOnToDelete.Cover)
-			if deleteErr != nil {
-				fmt.Println("Failed to delete add-on image from Firebase:", deleteErr)
-			}
-		}
-
-		_, err = MenuCollection.UpdateOne(ctx, bson.M{"_id": menuID}, bson.M{"$set": bson.M{"add_ons": updatedAddOns}})
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to update menu", "details": err.Error()})
-			return
-		}
-
-		c.JSON(http.StatusOK, gin.H{
-			"success": true,
-			"message": "Add-on removed successfully",
-		})
-	}
-}
-
 func DeleteMenu() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		menuID := c.Param("menu_id")
@@ -576,6 +304,13 @@ func DeleteMenu() gin.HandlerFunc {
 			return
 		}
 
+		// Update add-ons to set menu_id to an empty string
+		_, err = AddOnCollection.UpdateMany(ctx, bson.M{"menu_id": menuID}, bson.M{"$set": bson.M{"menu_id": ""}})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to update add-ons", "details": err.Error()})
+			return
+		}
+
 		// Optionally delete associated images (menu cover, menu images, add-on images)
 		app, _ := helpers.InitializeFirebaseApp()
 		client, _ := app.Storage(context.Background())
@@ -584,11 +319,6 @@ func DeleteMenu() gin.HandlerFunc {
 		}
 		for _, image := range menu.Images {
 			helpers.DeleteFileFromFirebase(client, image)
-		}
-		for _, addOn := range menu.AddOns {
-			if addOn.Cover != "" {
-				helpers.DeleteFileFromFirebase(client, addOn.Cover)
-			}
 		}
 
 		c.JSON(http.StatusOK, gin.H{"success": true, "message": "Menu deleted successfully"})

@@ -57,7 +57,7 @@ func RegisterUser() gin.HandlerFunc {
 
 		hashedPassword, hashErr := helpers.HashPassword(user.Password)
 		if hashErr != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error hashing password"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error hashing password", "details": hashErr.Error()})
 			return
 		}
 		user.Password = hashedPassword
@@ -73,13 +73,13 @@ func RegisterUser() gin.HandlerFunc {
 		subject := "Your Verification Code From NanoFood"
 		body := fmt.Sprintf("Your verification code is: <b>%s</b>", verificationCode)
 		if emailErr := helpers.SendEmail(user.Email, subject, body); emailErr != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to send verification email"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to send verification email", "details": emailErr.Error()})
 			return
 		}
 
 		_, err = UserCollection.InsertOne(ctx, user)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error creating user"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error creating user", "details": err.Error()})
 			return
 		}
 
@@ -113,7 +113,7 @@ func VerifyUser() gin.HandlerFunc {
 		err := UserCollection.FindOne(ctx, bson.M{"email": request.Email}).Decode(&user)
 		if err != nil {
 			if err == mongo.ErrNoDocuments {
-				c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "User not found"})
+				c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "User not found", "details": err.Error()})
 				return
 			}
 			log.Printf("Error retrieving user: %v", err)
@@ -129,7 +129,7 @@ func VerifyUser() gin.HandlerFunc {
 		update := bson.M{"$set": bson.M{"is_verified": true, "verification_code": ""}}
 		_, updateErr := UserCollection.UpdateOne(ctx, bson.M{"_id": user.User_ID}, update)
 		if updateErr != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to verify user"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to verify user", "details": updateErr.Error()})
 			return
 		}
 
@@ -156,7 +156,7 @@ func CreateUser() gin.HandlerFunc {
 		var branch models.Branch
 		err := BranchCollection.FindOne(ctx, bson.M{"_id": user.Branch_ID}).Decode(&branch)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error retrieving branch"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error retrieving branch", "details": err.Error()})
 			return
 		}
 
@@ -186,7 +186,7 @@ func CreateUser() gin.HandlerFunc {
 		// Hash the password
 		hashedPassword, hashErr := helpers.HashPassword(user.Password)
 		if hashErr != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error hashing password"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error hashing password", "details": hashErr.Error()})
 			return
 		}
 		user.Password = hashedPassword
@@ -199,7 +199,7 @@ func CreateUser() gin.HandlerFunc {
 
 		_, err = UserCollection.InsertOne(ctx, user)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error creating user"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error creating user", "details": err.Error()})
 			return
 		}
 
@@ -226,7 +226,7 @@ func LoginUser() gin.HandlerFunc {
 		err := UserCollection.FindOne(ctx, bson.M{"email": loginData.Email}).Decode(&user)
 		if err != nil {
 			if err == mongo.ErrNoDocuments {
-				c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": "Invalid email"})
+				c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": "Invalid email", "details": err.Error()})
 				return
 			}
 			log.Printf("Error finding user: %v", err)
@@ -243,7 +243,7 @@ func LoginUser() gin.HandlerFunc {
 		accessToken, err := token.TokenGenerator(user.Email, user.User_ID, user.Role)
 		if err != nil {
 			log.Printf("Error generating token: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error generating token"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error generating token", "details": err.Error()})
 			return
 		}
 
@@ -323,7 +323,7 @@ func UpdateUserInfo() gin.HandlerFunc {
 		)
 		if err != nil {
 			log.Printf("Error updating user: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error updating user"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error updating user", "details": err.Error()})
 			return
 		}
 
@@ -331,7 +331,7 @@ func UpdateUserInfo() gin.HandlerFunc {
 		err = UserCollection.FindOne(ctx, bson.M{"_id": user_id}).Decode(&updatedUser)
 		if err != nil {
 			log.Printf("Error retrieving updated user: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error retrieving updated user"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error retrieving updated user", "details": err.Error()})
 			return
 		}
 
@@ -347,7 +347,7 @@ func UploadAvatar() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		app, err := helpers.InitializeFirebaseApp()
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to initialize Firebase"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to initialize Firebase", "details": err.Error()})
 			return
 		}
 
@@ -390,7 +390,7 @@ func UploadAvatar() gin.HandlerFunc {
 			update := bson.M{"$set": bson.M{"avatar": avatarURL, "updated_at": time.Now()}}
 			_, err = UserCollection.UpdateOne(ctxUpdate, filter, update)
 			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to update user avatar"})
+				c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to update user avatar", "details": err.Error()})
 				return
 			}
 
@@ -429,7 +429,7 @@ func UpdateUserPassword() gin.HandlerFunc {
 		var user models.User
 		err = UserCollection.FindOne(ctx, bson.M{"_id": user_id}).Decode(&user)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": "User not found"})
+			c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": "User not found", "details": err.Error()})
 			return
 		}
 
@@ -440,7 +440,7 @@ func UpdateUserPassword() gin.HandlerFunc {
 
 		hashedPassword, err := helpers.HashPassword(passwordData.NewPassword)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error hashing new password"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error hashing new password", "details": err.Error()})
 			return
 		}
 
@@ -450,7 +450,7 @@ func UpdateUserPassword() gin.HandlerFunc {
 			bson.M{"$set": bson.M{"password": hashedPassword, "updated_at": time.Now()}},
 		)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error updating password"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error updating password", "details": err.Error()})
 			return
 		}
 
@@ -477,14 +477,14 @@ func UpdateUserRole() gin.HandlerFunc {
 		var branch models.Branch
 		err := BranchCollection.FindOne(ctx, bson.M{"_id": roleData.Branch_ID}).Decode(&branch)
 		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Branch not found"})
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Branch not found", "details": err.Error()})
 			return
 		}
 
 		var user models.User
 		err = UserCollection.FindOne(ctx, bson.M{"_id": roleData.User_ID}).Decode(&user)
 		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "User not found"})
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "User not found", "details": err.Error()})
 			return
 		}
 
@@ -522,7 +522,7 @@ func UpdateUserRole() gin.HandlerFunc {
 			bson.M{"$set": bson.M{"role": roleData.Role, "updated_at": time.Now()}},
 		)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error updating user role"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error updating user role", "details": err.Error()})
 			return
 		}
 
@@ -548,14 +548,14 @@ func UpdateUserBranch() gin.HandlerFunc {
 		var branch models.Branch
 		err := BranchCollection.FindOne(ctx, bson.M{"_id": reqBody.Branch_ID}).Decode(&branch)
 		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Branch not found"})
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Branch not found", "details": err.Error()})
 			return
 		}
 
 		var user models.User
 		err = UserCollection.FindOne(ctx, bson.M{"_id": reqBody.User_ID}).Decode(&user)
 		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "User not found"})
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "User not found", "details": err.Error()})
 			return
 		}
 
@@ -578,7 +578,7 @@ func UpdateUserBranch() gin.HandlerFunc {
 			bson.M{"$set": bson.M{"branch_id": branch.Branch_ID, "updated_at": time.Now()}},
 		)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error updating user branch"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error updating user branch", "details": err.Error()})
 			return
 		}
 
@@ -598,14 +598,14 @@ func DeleteUser() gin.HandlerFunc {
 		var branch models.Branch
 		err := BranchCollection.FindOne(ctx, bson.M{"_id": Branch_ID}).Decode(&branch)
 		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Branch not found"})
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Branch not found", "details": err.Error()})
 			return
 		}
 
 		var user models.User
 		err = UserCollection.FindOne(ctx, bson.M{"_id": User_ID}).Decode(&user)
 		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "User not found"})
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "User not found", "details": err.Error()})
 			return
 		}
 
@@ -630,7 +630,7 @@ func DeleteUser() gin.HandlerFunc {
 		result, err := UserCollection.DeleteOne(ctx, bson.M{"_id": User_ID})
 		if err != nil {
 			log.Printf("Error deleting user: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error deleting user"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error deleting user", "details": err.Error()})
 			return
 		}
 
@@ -657,7 +657,7 @@ func GetAllBranchUsers() gin.HandlerFunc {
 		var branch models.Branch
 		err := BranchCollection.FindOne(ctx, bson.M{"_id": branchID}).Decode(&branch)
 		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Branch not found"})
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Branch not found", "details": err.Error()})
 			return
 		}
 
@@ -687,14 +687,14 @@ func GetAllBranchUsers() gin.HandlerFunc {
 
 		cursor, err := UserCollection.Aggregate(ctx, pipeline)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error retrieving users"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error retrieving users", "details": err.Error()})
 			return
 		}
 		defer cursor.Close(ctx)
 
 		var users []bson.M
 		if err := cursor.All(ctx, &users); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error decoding users"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error decoding users", "details": err.Error()})
 			return
 		}
 
@@ -732,14 +732,14 @@ func GetAllUsers() gin.HandlerFunc {
 
 		cursor, err := UserCollection.Aggregate(ctx, pipeline)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error retrieving users"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error retrieving users", "details": err.Error()})
 			return
 		}
 		defer cursor.Close(ctx)
 
 		var users []bson.M
 		if err := cursor.All(ctx, &users); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error decoding users"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error decoding users", "details": err.Error()})
 			return
 		}
 

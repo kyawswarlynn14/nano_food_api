@@ -2,73 +2,99 @@ package routes
 
 import (
 	controllers "nano_food_api/controllers"
-	middlewares "nano_food_api/middlewares"
 
 	"github.com/gin-gonic/gin"
 )
 
-func UserRoutes(r *gin.Engine) {
-	publicRoutes := r.Group("/")
-	authRoutes := r.Group("/").Use(middlewares.Authentication([]int{}))
-	adminRoutes := r.Group("/").Use(middlewares.Authentication([]int{2, 3, 100}))
-
-	publicRoutes.POST("/register", controllers.RegisterUser())
-	publicRoutes.POST("/verify", controllers.VerifyUser())
-	publicRoutes.POST("/login", controllers.LoginUser())
-
-	authRoutes.GET("/me", controllers.GetCurrentUser())
-	authRoutes.PUT("/update-user-info", controllers.UpdateUserInfo())
-	authRoutes.PUT("/update-user-password", controllers.UpdateUserPassword())
-	authRoutes.PUT("/upload-avatar", controllers.UploadAvatar())
-
-	adminRoutes.GET("/get-branch-users/:branch_id", controllers.GetAllBranchUsers())
-	adminRoutes.PUT("/update-user-role", controllers.UpdateUserRole())
-	adminRoutes.DELETE("/delete-user/:user_id/:branch_id", controllers.DeleteUser())
-
-	publicRoutes.Use(middlewares.Authentication([]int{3, 100})).POST("/create-user", controllers.CreateUser())
-	publicRoutes.Use(middlewares.Authentication([]int{3, 100})).PUT("/update-user-branch", controllers.UpdateUserBranch())
-	publicRoutes.Use(middlewares.Authentication([]int{100})).GET("/get-all-users", controllers.GetAllUsers())
+type RouteGroups struct {
+	Public    *gin.RouterGroup
+	Auth      gin.IRoutes
+	Assistant gin.IRoutes
+	Manager   gin.IRoutes
+	Admin     gin.IRoutes
+	Root      gin.IRoutes
 }
 
-func BranchRoutes(r *gin.Engine) {
-	publicRoutes := r.Group("/")
-	adminRoutes := r.Group("/").Use(middlewares.Authentication([]int{3, 100}))
-	rootRoutes := r.Group("/").Use(middlewares.Authentication([]int{100}))
+func UserRoutes(r *RouteGroups) {
+	r.Public.POST("/register", controllers.RegisterUser())
+	r.Public.POST("/verify", controllers.VerifyUser())
+	r.Public.POST("/login", controllers.LoginUser())
 
-	publicRoutes.GET("/get-one-branch/:branch_id", controllers.GetOneBranch())
+	r.Auth.GET("/me", controllers.GetCurrentUser())
+	r.Auth.PUT("/update-user-info", controllers.UpdateUserInfo())
+	r.Auth.PUT("/update-user-password", controllers.UpdateUserPassword())
+	r.Auth.PUT("/upload-avatar", controllers.UploadAvatar())
 
-	adminRoutes.PUT("/update-branch/:branch_id", controllers.UpdateBranch())
-	adminRoutes.POST("/create-branch", controllers.CreateBranch())
-	adminRoutes.GET("/get-all-branches", controllers.GetBranches())
+	r.Manager.GET("/get-branch-users/:branch_id", controllers.GetAllBranchUsers())
+	r.Manager.PUT("/update-user-role", controllers.UpdateUserRole())
 
-	rootRoutes.DELETE("/delete-branch/:branch_id", controllers.DeleteBranch())
+	r.Admin.DELETE("/delete-user/:user_id/:branch_id", controllers.DeleteUser())
+	r.Admin.POST("/create-user", controllers.CreateUser())
+	r.Admin.PUT("/update-user-branch", controllers.UpdateUserBranch())
+	r.Root.GET("/get-all-users", controllers.GetAllUsers())
 }
 
-func CategoryRoutes(r *gin.Engine) {
-	publicRoutes := r.Group("/")
-	adminRoutes := r.Group("/").Use(middlewares.Authentication([]int{2, 3, 100}))
+func BranchRoutes(r *RouteGroups) {
+	r.Public.GET("/get-one-branch/:branch_id", controllers.GetOneBranch())
 
-	publicRoutes.GET("/get-all-categories/:branch_id", controllers.GetAllCategories())
-	publicRoutes.GET("/get-one-category/:category_id", controllers.GetOneCategory())
+	r.Admin.PUT("/update-branch/:branch_id", controllers.UpdateBranch())
+	r.Admin.POST("/create-branch", controllers.CreateBranch())
+	r.Admin.GET("/get-all-branches", controllers.GetBranches())
 
-	adminRoutes.PUT("/update-category/:category_id", controllers.UpdateCategory())
-	adminRoutes.POST("/create-category", controllers.CreateCategory())
-	adminRoutes.DELETE("/delete-category/:category_id", controllers.DeleteCategory())
+	r.Root.DELETE("/delete-branch/:branch_id", controllers.DeleteBranch())
 }
 
-func MenuRoutes(r *gin.Engine) {
-	publicRoutes := r.Group("/")
-	adminRoutes := r.Group("/").Use(middlewares.Authentication([]int{2, 3, 100}))
+func CategoryRoutes(r *RouteGroups) {
+	r.Public.GET("/get-all-categories/:branch_id", controllers.GetAllCategories())
+	r.Public.GET("/get-one-category/:category_id", controllers.GetOneCategory())
 
-	publicRoutes.GET("/get-menus-by-branchID/:branch_id", controllers.GetAllMenusByBranchID())
-	publicRoutes.GET("/get-menus-by-categoryID/:category_id", controllers.GetAllMenusByCategoryID())
-	publicRoutes.GET("/get-one-menu/:menu_id", controllers.GetOneMenu())
-	publicRoutes.GET("/search-menu", controllers.SearchMenu())
+	r.Manager.PUT("/update-category/:category_id", controllers.UpdateCategory())
+	r.Manager.POST("/create-category", controllers.CreateCategory())
+	r.Admin.DELETE("/delete-category/:category_id", controllers.DeleteCategory())
+}
 
-	adminRoutes.PUT("/update-menu/:menu_id", controllers.UpdateMenu())
-	adminRoutes.PUT("/add-menu-addon/:menu_id", controllers.AddMenuAddOn())
-	adminRoutes.PUT("/update-menu-addon/:menu_id/:add_on_id", controllers.UpdateMenuAddOn())
-	adminRoutes.PUT("/remove-menu-addon/:menu_id/:add_on_id", controllers.RemoveMenuAddOn())
-	adminRoutes.POST("/create-menu", controllers.CreateMenu())
-	adminRoutes.DELETE("/delete-menu/:menu_id", controllers.DeleteMenu())
+func TableRoutes(r *RouteGroups) {
+	r.Public.GET("/get-all-tables/:branch_id", controllers.GetAllTables())
+	r.Public.GET("/get-one-table/:table_id", controllers.GetOneTable())
+
+	r.Manager.PUT("/update-table/:table_id", controllers.UpdateTable())
+	r.Manager.POST("/create-table", controllers.CreateTable())
+	r.Admin.DELETE("/delete-table/:table_id", controllers.DeleteTable())
+}
+
+func MenuRoutes(r *RouteGroups) {
+	r.Public.GET("/get-menus-by-branchID/:branch_id", controllers.GetAllMenusByBranchID())
+	r.Public.GET("/get-menus-by-categoryID/:category_id", controllers.GetAllMenusByCategoryID())
+	r.Public.GET("/get-one-menu/:menu_id", controllers.GetOneMenu())
+	r.Public.GET("/search-menu", controllers.SearchMenu())
+
+	r.Manager.PUT("/update-menu/:menu_id", controllers.UpdateMenu())
+	r.Manager.POST("/create-menu", controllers.CreateMenu())
+	r.Admin.DELETE("/delete-menu/:menu_id", controllers.DeleteMenu())
+}
+
+func AddOnRoutes(r *RouteGroups) {
+	r.Public.GET("/get-all-addons", controllers.GetAllAddOns())
+	r.Public.GET("/get-one-addon/:add_on_id", controllers.GetOneAddOn())
+
+	r.Manager.POST("/create-addon", controllers.AddMenuAddOn())
+	r.Manager.PUT("/update-addon/:add_on_id", controllers.UpdateMenuAddOn())
+	r.Manager.DELETE("/delete-addon/:add_on_id", controllers.RemoveMenuAddOn())
+}
+
+func OrderRoutes(r *RouteGroups) {
+	r.Public.GET("/get-all-orders", controllers.GetAllOrders())
+	r.Public.GET("/get-one-order/:order_id", controllers.GetOneOrder())
+	r.Public.POST("/create-order", controllers.CreateOrder())
+
+	r.Manager.PUT("/update-order/:order_id", controllers.UpdateOrder())
+	r.Admin.DELETE("/delete-order/:order_id", controllers.DeleteOrder())
+}
+
+func SaleRoutes(r *RouteGroups) {
+	r.Manager.GET("/get-all-sales", controllers.GetAllSales())
+	r.Public.GET("/get-one-sale/:sale_id", controllers.GetOneSale())
+	r.Public.POST("/create-sale", controllers.CreateSale())
+
+	r.Admin.DELETE("/delete-sale/:sale_id", controllers.DeleteSale())
 }

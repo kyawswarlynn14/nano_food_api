@@ -43,7 +43,7 @@ func CreateCategory() gin.HandlerFunc {
 
 		_, err = CategoryCollection.InsertOne(ctx, category)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error creating category"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error creating category", "details": err.Error()})
 			return
 		}
 
@@ -72,14 +72,14 @@ func GetAllCategories() gin.HandlerFunc {
 
 		cursor, err := CategoryCollection.Aggregate(ctx, pipeline)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error retrieving categories"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error retrieving categories", "details": err.Error()})
 			return
 		}
 		defer cursor.Close(ctx)
 
 		var categories []bson.M
 		if err := cursor.All(ctx, &categories); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error decoding categories"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error decoding categories", "details": err.Error()})
 			return
 		}
 
@@ -112,14 +112,14 @@ func GetOneCategory() gin.HandlerFunc {
 
 		cursor, err := CategoryCollection.Aggregate(ctx, pipeline)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error retrieving category"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error retrieving category", "details": err.Error()})
 			return
 		}
 		defer cursor.Close(ctx)
 
 		var categories []bson.M
 		if err := cursor.All(ctx, &categories); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error decoding category"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error decoding category", "details": err.Error()})
 			return
 		}
 
@@ -171,7 +171,7 @@ func UpdateCategory() gin.HandlerFunc {
 
 		result, err := CategoryCollection.UpdateOne(ctx, filter, update)
 		if err != nil || result.MatchedCount == 0 {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error updating category"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error updating category", "details": err.Error()})
 			return
 		}
 
@@ -205,9 +205,15 @@ func DeleteCategory() gin.HandlerFunc {
 			return
 		}
 
+		_, err = MenuCollection.UpdateMany(ctx, bson.M{"category_id": categoryID}, bson.M{"$set": bson.M{"category_id": ""}})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to update menus", "details": err.Error()})
+			return
+		}
+
 		_, err = CategoryCollection.DeleteOne(ctx, bson.M{"_id": categoryID})
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error deleting category"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error deleting category", "details": err.Error()})
 			return
 		}
 

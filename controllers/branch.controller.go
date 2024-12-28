@@ -33,7 +33,7 @@ func CreateBranch() gin.HandlerFunc {
 
 		_, err := BranchCollection.InsertOne(ctx, branch)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error creating branch"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error creating branch", "details": err.Error()})
 			return
 		}
 
@@ -50,13 +50,13 @@ func GetBranches() gin.HandlerFunc {
 		var branches []models.Branch
 		cursor, err := BranchCollection.Find(ctx, bson.M{})
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error retrieving branches"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error retrieving branches", "details": err.Error()})
 			return
 		}
 		defer cursor.Close(ctx)
 
 		if err := cursor.All(ctx, &branches); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error decoding branches"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error decoding branches", "details": err.Error()})
 			return
 		}
 
@@ -129,7 +129,7 @@ func UpdateBranch() gin.HandlerFunc {
 
 		result, err := BranchCollection.UpdateOne(ctx, filter, update)
 		if err != nil || result.MatchedCount == 0 {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error updating branch"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error updating branch", "details": err.Error()})
 			return
 		}
 
@@ -147,7 +147,7 @@ func DeleteBranch() gin.HandlerFunc {
 
 		_, err := BranchCollection.DeleteOne(ctx, bson.M{"_id": branchID})
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error deleting branch"})
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error deleting branch", "details": err.Error()})
 			return
 		}
 

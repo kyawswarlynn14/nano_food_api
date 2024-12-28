@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"nano_food_api/middlewares"
 	"nano_food_api/routes"
 
 	"github.com/gin-contrib/cors"
@@ -53,11 +54,24 @@ func main() {
 		AllowCredentials: true,
 	}))
 
+	routeGroups := &routes.RouteGroups{
+		Public:    router.Group("/"),
+		Auth:      router.Group("/").Use(middlewares.Authentication([]int{})),
+		Assistant: router.Group("/").Use(middlewares.Authentication([]int{1, 2, 3, 100})),
+		Manager:   router.Group("/").Use(middlewares.Authentication([]int{2, 3, 100})),
+		Admin:     router.Group("/").Use(middlewares.Authentication([]int{3, 100})),
+		Root:      router.Group("/").Use(middlewares.Authentication([]int{100})),
+	}
+
 	// Routes
-	routes.UserRoutes(router)
-	routes.BranchRoutes(router)
-	routes.CategoryRoutes(router)
-	routes.MenuRoutes(router)
+	routes.UserRoutes(routeGroups)
+	routes.BranchRoutes(routeGroups)
+	routes.CategoryRoutes(routeGroups)
+	routes.TableRoutes(routeGroups)
+	routes.MenuRoutes(routeGroups)
+	routes.AddOnRoutes(routeGroups)
+	routes.OrderRoutes(routeGroups)
+	routes.SaleRoutes(routeGroups)
 
 	log.Fatal(router.Run(":" + port))
 }
