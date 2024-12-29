@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"net/http"
 	"os"
 	"time"
 
@@ -62,6 +63,16 @@ func main() {
 		Admin:     router.Group("/").Use(middlewares.Authentication([]int{3, 100})),
 		Root:      router.Group("/").Use(middlewares.Authentication([]int{100})),
 	}
+
+	routeGroups.Public.GET("/", func(c *gin.Context) {
+		c.JSON(
+			http.StatusOK,
+			gin.H{
+				"success": true,
+				"message": "API is working!",
+			},
+		)
+	})
 
 	// Routes
 	routes.UserRoutes(routeGroups)

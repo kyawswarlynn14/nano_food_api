@@ -348,7 +348,7 @@ func GetAllMenusByBranchID() gin.HandlerFunc {
 				"$lookup": bson.M{
 					"from":         "branches",
 					"localField":   "branch_id",
-					"foreignField": "branch_id",
+					"foreignField": "_id",
 					"as":           "branch",
 				},
 			},
@@ -356,7 +356,7 @@ func GetAllMenusByBranchID() gin.HandlerFunc {
 				"$lookup": bson.M{
 					"from":         "categories",
 					"localField":   "category_id",
-					"foreignField": "category_id",
+					"foreignField": "_id",
 					"as":           "category",
 				},
 			},
@@ -398,7 +398,7 @@ func GetAllMenusByCategoryID() gin.HandlerFunc {
 				"$lookup": bson.M{
 					"from":         "branches",
 					"localField":   "branch_id",
-					"foreignField": "branch_id",
+					"foreignField": "_id",
 					"as":           "branch",
 				},
 			},
@@ -406,7 +406,7 @@ func GetAllMenusByCategoryID() gin.HandlerFunc {
 				"$lookup": bson.M{
 					"from":         "categories",
 					"localField":   "category_id",
-					"foreignField": "category_id",
+					"foreignField": "_id",
 					"as":           "category",
 				},
 			},
@@ -433,6 +433,16 @@ func GetOneMenu() gin.HandlerFunc {
 		var ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
+		menuExists, err := helpers.CheckDataExist(ctx, database.MenuCollection, bson.M{"_id": menuID})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to validate menu", "details": err.Error()})
+			return
+		}
+		if !menuExists {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid menu ID"})
+			return
+		}
+
 		// Aggregate to populate branch and category
 		cursor, err := MenuCollection.Aggregate(ctx, bson.A{
 			bson.M{"$match": bson.M{"_id": menuID}},
@@ -440,7 +450,7 @@ func GetOneMenu() gin.HandlerFunc {
 				"$lookup": bson.M{
 					"from":         "branches",
 					"localField":   "branch_id",
-					"foreignField": "branch_id",
+					"foreignField": "_id",
 					"as":           "branch",
 				},
 			},
@@ -448,7 +458,7 @@ func GetOneMenu() gin.HandlerFunc {
 				"$lookup": bson.M{
 					"from":         "categories",
 					"localField":   "category_id",
-					"foreignField": "category_id",
+					"foreignField": "_id",
 					"as":           "category",
 				},
 			},
@@ -523,7 +533,7 @@ func SearchMenu() gin.HandlerFunc {
 				"$lookup": bson.M{
 					"from":         "branches",
 					"localField":   "branch_id",
-					"foreignField": "branch_id",
+					"foreignField": "_id",
 					"as":           "branch",
 				},
 			},
@@ -531,7 +541,7 @@ func SearchMenu() gin.HandlerFunc {
 				"$lookup": bson.M{
 					"from":         "categories",
 					"localField":   "category_id",
-					"foreignField": "category_id",
+					"foreignField": "_id",
 					"as":           "category",
 				},
 			},

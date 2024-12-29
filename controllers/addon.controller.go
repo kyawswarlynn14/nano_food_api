@@ -25,38 +25,66 @@ func AddMenuAddOn() gin.HandlerFunc {
 
 		// Parse add-on data from request
 		menuID := c.PostForm("menu_id")
-		addOnTitle := c.PostForm("add_on_title")
-		addOnDescription := c.PostForm("add_on_description")
-		addOnPrice := helpers.ParseFloat(c.PostForm("add_on_price"))
+		addOnTitle := c.PostForm("title")
+		addOnDescription := c.PostForm("description")
+		addOnPrice := helpers.ParseFloat(c.PostForm("price"))
 
 		// Find existing menu
 		var existingMenu models.Menu
 		err := MenuCollection.FindOne(ctx, bson.M{"_id": menuID}).Decode(&existingMenu)
 		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Menu not found", "details": err.Error()})
+			c.JSON(
+				http.StatusNotFound,
+				gin.H{
+					"success": false,
+					"error":   "Menu not found",
+					"details": err.Error(),
+				},
+			)
 			return
 		}
 
 		// Upload add-on image
 		app, err := helpers.InitializeFirebaseApp()
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to initialize Firebase", "details": err.Error()})
+			c.JSON(
+				http.StatusInternalServerError,
+				gin.H{
+					"success": false,
+					"error":   "Failed to initialize Firebase",
+					"details": err.Error(),
+				},
+			)
 			return
 		}
 
 		client, err := app.Storage(context.Background())
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to connect to Firebase Storage", "details": err.Error()})
+			c.JSON(
+				http.StatusInternalServerError,
+				gin.H{
+					"success": false,
+					"error":   "Failed to connect to Firebase Storage",
+					"details": err.Error(),
+				},
+			)
 			return
 		}
 
 		var addOnImageURL string
-		addOnImageFile, addOnImageHeader, err := c.Request.FormFile("add_on_image")
+		addOnImageFile, addOnImageHeader, err := c.Request.FormFile("cover")
 		if err == nil {
 			defer addOnImageFile.Close()
 			addOnImageURL, err = helpers.UploadFileToFirebase(client, addOnImageFile, fmt.Sprintf("addons/%d_%s", time.Now().Unix(), addOnImageHeader.Filename))
 			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to upload add-on image", "details": err.Error()})
+				c.JSON(
+					http.StatusInternalServerError,
+					gin.H{
+						"success": false,
+						"error":   "Failed to upload add-on image",
+						"details": err.Error(),
+					},
+				)
 				return
 			}
 		}
@@ -74,7 +102,13 @@ func AddMenuAddOn() gin.HandlerFunc {
 
 		_, err = AddOnCollection.InsertOne(ctx, addOn)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to save addon", "details": err.Error()})
+			c.JSON(
+				http.StatusInternalServerError,
+				gin.H{
+					"success": false, "error": "Failed to save addon",
+					"details": err.Error(),
+				},
+			)
 			return
 		}
 
@@ -90,13 +124,27 @@ func UpdateMenuAddOn() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		app, err := helpers.InitializeFirebaseApp()
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to initialize Firebase", "details": err.Error()})
+			c.JSON(
+				http.StatusInternalServerError,
+				gin.H{
+					"success": false,
+					"error":   "Failed to initialize Firebase",
+					"details": err.Error(),
+				},
+			)
 			return
 		}
 
 		client, err := app.Storage(context.Background())
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to connect to Firebase Storage", "details": err.Error()})
+			c.JSON(
+				http.StatusInternalServerError,
+				gin.H{
+					"success": false,
+					"error":   "Failed to connect to Firebase Storage",
+					"details": err.Error(),
+				},
+			)
 			return
 		}
 
@@ -108,7 +156,14 @@ func UpdateMenuAddOn() gin.HandlerFunc {
 		defer cancel()
 		err = AddOnCollection.FindOne(ctx, bson.M{"_id": addOnID}).Decode(&existingAddOn)
 		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Add On not found", "details": err.Error()})
+			c.JSON(
+				http.StatusNotFound,
+				gin.H{
+					"success": false,
+					"error":   "Add On not found",
+					"details": err.Error(),
+				},
+			)
 			return
 		}
 
@@ -126,11 +181,24 @@ func UpdateMenuAddOn() gin.HandlerFunc {
 
 		menuExists, err := helpers.CheckDataExist(ctx, database.MenuCollection, bson.M{"_id": addOnUpdate.Menu_ID})
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to validate menu", "details": err.Error()})
+			c.JSON(
+				http.StatusInternalServerError,
+				gin.H{
+					"success": false,
+					"error":   "Failed to validate menu",
+					"details": err.Error(),
+				},
+			)
 			return
 		}
 		if !menuExists {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Invalid menu ID"})
+			c.JSON(
+				http.StatusBadRequest,
+				gin.H{
+					"success": false,
+					"error":   "Invalid menu ID",
+				},
+			)
 			return
 		}
 
@@ -152,7 +220,7 @@ func UpdateMenuAddOn() gin.HandlerFunc {
 		}
 
 		// Handle add on cover update
-		addOnCoverFile, addOnCoverHeader, err := c.Request.FormFile("add_on_image")
+		addOnCoverFile, addOnCoverHeader, err := c.Request.FormFile("cover")
 		if err == nil {
 			defer addOnCoverFile.Close()
 
@@ -167,7 +235,14 @@ func UpdateMenuAddOn() gin.HandlerFunc {
 			// Upload new menu cover
 			addOnCoverURL, uploadErr := helpers.UploadFileToFirebase(client, addOnCoverFile, fmt.Sprintf("addons/%d_%s", time.Now().Unix(), addOnCoverHeader.Filename))
 			if uploadErr != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to upload add on cover image", "details": uploadErr.Error()})
+				c.JSON(
+					http.StatusInternalServerError,
+					gin.H{
+						"success": false,
+						"error":   "Failed to upload add on cover image",
+						"details": uploadErr.Error(),
+					},
+				)
 				return
 			}
 			updateFields["cover"] = addOnCoverURL
@@ -176,7 +251,13 @@ func UpdateMenuAddOn() gin.HandlerFunc {
 		// Update add on in MongoDB
 		_, err = AddOnCollection.UpdateOne(ctx, bson.M{"_id": addOnID}, bson.M{"$set": updateFields})
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to update add on", "details": err.Error()})
+			c.JSON(
+				http.StatusInternalServerError,
+				gin.H{
+					"success": false, "error": "Failed to update add on",
+					"details": err.Error(),
+				},
+			)
 			return
 		}
 
@@ -191,13 +272,27 @@ func RemoveMenuAddOn() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		app, err := helpers.InitializeFirebaseApp()
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to initialize Firebase", "details": err.Error()})
+			c.JSON(
+				http.StatusInternalServerError,
+				gin.H{
+					"success": false,
+					"error":   "Failed to initialize Firebase",
+					"details": err.Error(),
+				},
+			)
 			return
 		}
 
 		client, err := app.Storage(context.Background())
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to connect to Firebase Storage", "details": err.Error()})
+			c.JSON(
+				http.StatusInternalServerError,
+				gin.H{
+					"success": false,
+					"error":   "Failed to connect to Firebase Storage",
+					"details": err.Error(),
+				},
+			)
 			return
 		}
 
@@ -209,7 +304,14 @@ func RemoveMenuAddOn() gin.HandlerFunc {
 		var addOn models.AddOn
 		err = AddOnCollection.FindOne(ctx, bson.M{"_id": addOnID}).Decode(&addOn)
 		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "AddOn item not found", "details": err.Error()})
+			c.JSON(
+				http.StatusNotFound,
+				gin.H{
+					"success": false,
+					"error":   "AddOn item not found",
+					"details": err.Error(),
+				},
+			)
 			return
 		}
 
@@ -219,7 +321,14 @@ func RemoveMenuAddOn() gin.HandlerFunc {
 
 		_, err = AddOnCollection.DeleteOne(ctx, bson.M{"_id": addOnID})
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error deleting add on item", "details": err.Error()})
+			c.JSON(
+				http.StatusInternalServerError,
+				gin.H{
+					"success": false,
+					"error":   "Error deleting add on item",
+					"details": err.Error(),
+				},
+			)
 			return
 		}
 
@@ -255,18 +364,39 @@ func GetAllAddOns() gin.HandlerFunc {
 
 		cursor, err := AddOnCollection.Aggregate(ctx, pipeline)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error retrieving addons", "details": err.Error()})
+			c.JSON(
+				http.StatusInternalServerError,
+				gin.H{
+					"success": false,
+					"error":   "Error retrieving addons",
+					"details": err.Error(),
+				},
+			)
 			return
 		}
 		defer cursor.Close(ctx)
 
 		var addOns []bson.M
 		if err := cursor.All(ctx, &addOns); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error decoding addOns", "details": err.Error()})
+			c.JSON(
+				http.StatusInternalServerError,
+				gin.H{
+					"success": false,
+					"error":   "Error decoding addOns",
+					"details": err.Error(),
+				},
+			)
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{"success": true, "message": "AddOns retrieved successfully", "data": addOns})
+		c.JSON(
+			http.StatusOK,
+			gin.H{
+				"success": true,
+				"message": "AddOns retrieved successfully",
+				"data":    addOns,
+			},
+		)
 	}
 }
 
@@ -290,22 +420,49 @@ func GetOneAddOn() gin.HandlerFunc {
 
 		cursor, err := AddOnCollection.Aggregate(ctx, pipeline)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error retrieving addons", "details": err.Error()})
+			c.JSON(
+				http.StatusInternalServerError,
+				gin.H{
+					"success": false,
+					"error":   "Error retrieving addons",
+					"details": err.Error(),
+				},
+			)
 			return
 		}
 		defer cursor.Close(ctx)
 
 		var addOns []bson.M
 		if err := cursor.All(ctx, &addOns); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error decoding addons", "details": err.Error()})
+			c.JSON(
+				http.StatusInternalServerError,
+				gin.H{
+					"success": false,
+					"error":   "Error decoding addons",
+					"details": err.Error(),
+				},
+			)
 			return
 		}
 
 		if len(addOns) == 0 {
-			c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "AddOn not found"})
+			c.JSON(
+				http.StatusNotFound,
+				gin.H{
+					"success": false,
+					"error":   "AddOn not found",
+				},
+			)
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{"success": true, "message": "AddOn retrieved successfully", "data": addOns[0]})
+		c.JSON(
+			http.StatusOK,
+			gin.H{
+				"success": true,
+				"message": "AddOn retrieved successfully",
+				"data":    addOns[0],
+			},
+		)
 	}
 }

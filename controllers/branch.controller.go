@@ -23,7 +23,13 @@ func CreateBranch() gin.HandlerFunc {
 
 		var branch models.Branch
 		if err := c.BindJSON(&branch); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error()})
+			c.JSON(
+				http.StatusBadRequest,
+				gin.H{
+					"success": false,
+					"error":   err.Error(),
+				},
+			)
 			return
 		}
 
@@ -33,11 +39,24 @@ func CreateBranch() gin.HandlerFunc {
 
 		_, err := BranchCollection.InsertOne(ctx, branch)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error creating branch", "details": err.Error()})
+			c.JSON(
+				http.StatusInternalServerError,
+				gin.H{
+					"success": false,
+					"error":   "Error creating branch",
+					"details": err.Error(),
+				},
+			)
 			return
 		}
 
-		c.JSON(http.StatusCreated, gin.H{"success": true, "message": "Branch created successfully"})
+		c.JSON(
+			http.StatusCreated,
+			gin.H{
+				"success": true,
+				"message": "Branch created successfully",
+			},
+		)
 	}
 }
 
@@ -50,21 +69,36 @@ func GetBranches() gin.HandlerFunc {
 		var branches []models.Branch
 		cursor, err := BranchCollection.Find(ctx, bson.M{})
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error retrieving branches", "details": err.Error()})
+			c.JSON(
+				http.StatusInternalServerError,
+				gin.H{
+					"success": false,
+					"error":   "Error retrieving branches",
+					"details": err.Error(),
+				},
+			)
 			return
 		}
 		defer cursor.Close(ctx)
 
 		if err := cursor.All(ctx, &branches); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error decoding branches", "details": err.Error()})
+			c.JSON(
+				http.StatusInternalServerError,
+				gin.H{
+					"success": false,
+					"error":   "Error decoding branches",
+					"details": err.Error(),
+				},
+			)
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{
-			"success": true,
-			"message": "Branches retrieved successfully",
-			"data":    branches,
-		})
+		c.JSON(
+			http.StatusOK, gin.H{
+				"success": true,
+				"message": "Branches retrieved successfully",
+				"data":    branches,
+			})
 	}
 }
 
@@ -79,15 +113,23 @@ func GetOneBranch() gin.HandlerFunc {
 		err := BranchCollection.FindOne(ctx, bson.M{"_id": branchID}).Decode(&branch)
 		if err != nil {
 			log.Printf("Error retrieving branch: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error retrieving branch", "details": err.Error()})
+			c.JSON(
+				http.StatusInternalServerError,
+				gin.H{
+					"success": false,
+					"error":   "Error retrieving branch",
+					"details": err.Error(),
+				},
+			)
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{
-			"success": true,
-			"message": "branch retrieved successfully",
-			"data":    branch,
-		})
+		c.JSON(
+			http.StatusOK, gin.H{
+				"success": true,
+				"message": "branch retrieved successfully",
+				"data":    branch,
+			})
 	}
 }
 
@@ -101,18 +143,36 @@ func UpdateBranch() gin.HandlerFunc {
 
 		userInfo, err := helpers.GetCurrentUser(c, database.UserCollection)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+			c.JSON(
+				http.StatusInternalServerError,
+				gin.H{
+					"success": false,
+					"error":   err.Error(),
+				},
+			)
 			return
 		}
 
 		var branch models.Branch
 		if err := c.BindJSON(&branch); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error()})
+			c.JSON(
+				http.StatusBadRequest,
+				gin.H{
+					"success": false,
+					"error":   err.Error(),
+				},
+			)
 			return
 		}
 
 		if userInfo.Role != 100 && userInfo.Branch_ID != branchID {
-			c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Unauthorized Access"})
+			c.JSON(
+				http.StatusBadRequest,
+				gin.H{
+					"success": false,
+					"error":   "Unauthorized Access",
+				},
+			)
 			return
 		}
 
@@ -129,11 +189,24 @@ func UpdateBranch() gin.HandlerFunc {
 
 		result, err := BranchCollection.UpdateOne(ctx, filter, update)
 		if err != nil || result.MatchedCount == 0 {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error updating branch", "details": err.Error()})
+			c.JSON(
+				http.StatusInternalServerError,
+				gin.H{
+					"success": false,
+					"error":   "Error updating branch",
+					"details": err.Error(),
+				},
+			)
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{"success": true, "message": "branch updated successfully"})
+		c.JSON(
+			http.StatusOK,
+			gin.H{
+				"success": true,
+				"message": "branch updated successfully",
+			},
+		)
 	}
 }
 
@@ -147,10 +220,23 @@ func DeleteBranch() gin.HandlerFunc {
 
 		_, err := BranchCollection.DeleteOne(ctx, bson.M{"_id": branchID})
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error deleting branch", "details": err.Error()})
+			c.JSON(
+				http.StatusInternalServerError,
+				gin.H{
+					"success": false,
+					"error":   "Error deleting branch",
+					"details": err.Error(),
+				},
+			)
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{"success": true, "message": "Branch deleted successfully"})
+		c.JSON(
+			http.StatusOK,
+			gin.H{
+				"success": true,
+				"message": "Branch deleted successfully",
+			},
+		)
 	}
 }

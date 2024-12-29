@@ -93,6 +93,12 @@ type Menu struct {
 	Updated_At  time.Time `json:"updated_at" bson:"updated_at"`
 }
 
+/**
+order status
+001 => available
+002 => occupide
+**/
+
 type Table struct {
 	Table_ID   string    `json:"_id" bson:"_id"`
 	Branch_ID  string    `json:"branch_id" bson:"branch_id"`
@@ -128,29 +134,27 @@ type Order struct {
 // OrderItem represents an individual item in an order
 type OrderItem struct {
 	Menu_ID    string      `json:"menu_id" bson:"menu_id"`
-	AddOnItems []AddOnItem `json:"add_on_items,omitempty" bson:"add_on_items,omitempty"`
 	Quantity   int         `json:"quantity" bson:"quantity"`
-	SubTotal   float64     `json:"sub_total" bson:"sub_total"` // Calculated: (Price + AddOnPrices) * Quantity
+	AddOnItems []AddOnItem `json:"add_on_items,omitempty" bson:"add_on_items,omitempty"`
 	Note       string      `json:"note,omitempty" bson:"note,omitempty"`
 }
 
 type AddOnItem struct {
-	AddOnID  string  `json:"add_on_id" bson:"add_on_id"`
-	Quantity int     `json:"quantity" bson:"quantity"`
-	SubTotal float64 `json:"sub_total" bson:"sub_total"` // Calculated: (Price + AddOnPrices) * Quantity
-	Note     string  `json:"note,omitempty" bson:"note,omitempty"`
+	AddOnID  string `json:"add_on_id" bson:"add_on_id"`
+	Quantity int    `json:"quantity" bson:"quantity"`
+	Note     string `json:"note,omitempty" bson:"note,omitempty"`
 }
 
 type Sale struct {
 	Sale_ID       string    `json:"_id" bson:"_id"`
-	Table_ID      string    `json:"table_id" bson:"table_id"`             // Table linked to this sale
-	Branch_ID     string    `json:"branch_id" bson:"branch_id"`           // Branch where the sale occurred
-	OrderIDs      []string  `json:"order_ids" bson:"order_ids"`           // List of associated Order IDs
-	TotalAmount   float64   `json:"total_amount" bson:"total_amount"`     // Total without discounts or taxes
-	Discount      float64   `json:"discount" bson:"discount"`             // Total discount applied
-	Tax           float64   `json:"tax" bson:"tax"`                       // Total tax applied
-	GrandTotal    float64   `json:"grand_total" bson:"grand_total"`       // Final total (TotalAmount - Discount + Tax)
+	Table_ID      string    `json:"table_id" bson:"table_id"`
+	Branch_ID     string    `json:"branch_id" bson:"branch_id"`
+	OrderIDs      []string  `json:"order_ids" bson:"order_ids"`
+	TotalAmount   float64   `json:"total_amount" bson:"total_amount"`
+	Discount      float64   `json:"discount" bson:"discount"`
+	Tax           float64   `json:"tax" bson:"tax"`
+	GrandTotal    float64   `json:"grand_total" bson:"grand_total"`
 	PaymentMethod string    `json:"payment_method" bson:"payment_method"` // Payment method (e.g., "Cash", "Card")
-	Note          string    `json:"note,omitempty" bson:"note,omitempty"` // Any additional note for the sale
-	Created_At    time.Time `json:"created_at" bson:"created_at"`         // Sale creation timestamp
+	Note          string    `json:"note,omitempty" bson:"note,omitempty"`
+	Created_At    time.Time `json:"created_at" bson:"created_at"`
 }

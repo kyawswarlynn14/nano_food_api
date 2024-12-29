@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"log"
 	"nano_food_api/database"
 	"nano_food_api/helpers"
 	"nano_food_api/models"
@@ -15,6 +16,68 @@ import (
 )
 
 var OrderCollection *mongo.Collection = database.OrderCollection
+
+func orderPipeline(filter bson.M) mongo.Pipeline {
+	var pipeline = mongo.Pipeline{
+		{{Key: "$match", Value: filter}},
+		{{Key: "$lookup", Value: bson.M{
+			"from":         "menus",
+			"localField":   "menu_items.menu_id",
+			"foreignField": "_id",
+			"as":           "menu_details",
+		}}},
+		{{Key: "$lookup", Value: bson.M{
+			"from":         "add_ons",
+			"localField":   "menu_items.add_on_items.add_on_id",
+			"foreignField": "_id",
+			"as":           "add_on_details",
+		}}},
+		{{Key: "$addFields", Value: bson.M{
+			"menu_items": bson.M{
+				"$map": bson.M{
+					"input": "$menu_items",
+					"as":    "menu_item",
+					"in": bson.M{
+						"menu_id":  "$$menu_item.menu_id",
+						"note":     "$$menu_item.note",
+						"quantity": "$$menu_item.quantity",
+						"menu_details": bson.M{
+							"$filter": bson.M{
+								"input": "$menu_details",
+								"as":    "menu_detail",
+								"cond":  bson.M{"$eq": []interface{}{"$$menu_detail._id", "$$menu_item.menu_id"}},
+							},
+						},
+						"add_on_items": bson.M{
+							"$map": bson.M{
+								"input": "$$menu_item.add_on_items",
+								"as":    "add_on_item",
+								"in": bson.M{
+									"add_on_id": "$$add_on_item.add_on_id",
+									"note":      "$$add_on_item.note",
+									"quantity":  "$$add_on_item.quantity",
+									"add_on_details": bson.M{
+										"$filter": bson.M{
+											"input": "$add_on_details",
+											"as":    "add_on_detail",
+											"cond":  bson.M{"$eq": []interface{}{"$$add_on_detail._id", "$$add_on_item.add_on_id"}},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}}},
+		{{Key: "$project", Value: bson.M{
+			"menu_details":   0,
+			"add_on_details": 0,
+		}}},
+	}
+
+	return pipeline
+}
 
 func CreateOrder() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -55,9 +118,31 @@ func CreateOrder() gin.HandlerFunc {
 
 		// Calculate total amount
 		totalAmount := 0.0
-		for _, item := range order.MenuItems {
-			itemTotal := item.SubTotal
-			totalAmount += itemTotal
+		for _, menuItem := range order.MenuItems {
+			var menu models.Menu
+			err := MenuCollection.FindOne(ctx, bson.M{"_id": menuItem.Menu_ID}).Decode(&menu)
+			if err != nil {
+				log.Printf("Error retrieving menu: %v", err)
+				c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error retrieving menu", "details": err.Error()})
+				return
+			}
+			menuPrice := (menu.Price - menu.Discount) * float64(menuItem.Quantity)
+
+			addOnSubTotal := 0.0
+			for _, addOnItem := range menuItem.AddOnItems {
+				var addOn models.AddOn
+				err := AddOnCollection.FindOne(ctx, bson.M{"_id": addOnItem.AddOnID}).Decode(&addOn)
+				if err != nil {
+					log.Printf("Error retrieving addon: %v", err)
+					c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Error retrieving addon", "details": err.Error()})
+					return
+				}
+				addOnPrice := addOn.Price * float64(addOnItem.Quantity)
+				addOnSubTotal += addOnPrice
+			}
+
+			menuSubtotal := menuPrice + addOnSubTotal
+			totalAmount += menuSubtotal
 		}
 		order.TotalAmount = totalAmount
 
@@ -87,23 +172,7 @@ func GetAllOrders() gin.HandlerFunc {
 			filter["table_id"] = tableID
 		}
 
-		pipeline := mongo.Pipeline{
-			{{Key: "$match", Value: filter}},
-			{{Key: "$lookup", Value: bson.M{
-				"from":         "menus",
-				"localField":   "menu_items.menu_id",
-				"foreignField": "_id",
-				"as":           "menu_details",
-			}}},
-			{{Key: "$unwind", Value: bson.M{"path": "$menu_details", "preserveNullAndEmptyArrays": true}}},
-			{{Key: "$lookup", Value: bson.M{
-				"from":         "addons",
-				"localField":   "menu_items.add_on_items.add_on_id",
-				"foreignField": "_id",
-				"as":           "add_on_details",
-			}}},
-			{{Key: "$unwind", Value: bson.M{"path": "$add_on_details", "preserveNullAndEmptyArrays": true}}},
-		}
+		pipeline := orderPipeline(filter)
 
 		cursor, err := OrderCollection.Aggregate(ctx, pipeline)
 		if err != nil {
@@ -128,24 +197,9 @@ func GetOneOrder() gin.HandlerFunc {
 		defer cancel()
 
 		orderID := c.Param("order_id")
+		filter := bson.M{"_id": orderID}
 
-		pipeline := mongo.Pipeline{
-			{{Key: "$match", Value: bson.M{"_id": orderID}}},
-			{{Key: "$lookup", Value: bson.M{
-				"from":         "menus",
-				"localField":   "menu_items.menu_id",
-				"foreignField": "_id",
-				"as":           "menu_details",
-			}}},
-			{{Key: "$unwind", Value: bson.M{"path": "$menu_details", "preserveNullAndEmptyArrays": true}}},
-			{{Key: "$lookup", Value: bson.M{
-				"from":         "addons",
-				"localField":   "menu_items.add_on_items.add_on_id",
-				"foreignField": "_id",
-				"as":           "add_on_details",
-			}}},
-			{{Key: "$unwind", Value: bson.M{"path": "$add_on_details", "preserveNullAndEmptyArrays": true}}},
-		}
+		pipeline := orderPipeline(filter)
 
 		cursor, err := OrderCollection.Aggregate(ctx, pipeline)
 		if err != nil {
